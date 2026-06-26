@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">
+  <title>Biznes App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-ikona">B</div>
+      <span class="logo-tekst">BiznesApp</span>
+    </div>
+    <nav class="menu" id="menu-glowny">
+      <a href="#" class="menu-item aktywny" data-strona="dashboard">
+        <span>⬛</span> Dashboard
+      </a>
+      <a href="#" class="menu-item" data-strona="biznesy">
+        <span>🏢</span> Moje biznesy
+      </a>
+    </nav>
+    <div id="menu-biznes" class="menu-biznes ukryty">
+      <div class="menu-separator"></div>
+      <div class="menu-biznes-nazwa" id="sidebar-biznes-nazwa">—</div>
+      <a href="#" class="menu-item" data-tab="przeglad"><span>📊</span> Przegląd</a>
+      <a href="#" class="menu-item" data-tab="pracownicy"><span>👷</span> Pracownicy</a>
+      <a href="#" class="menu-item" data-tab="wyjazdy"><span>🚗</span> Wyjazdy</a>
+      <a href="#" class="menu-item" data-tab="faktury"><span>📄</span> Faktury</a>
+      <a href="#" class="menu-item" data-tab="wyplaty"><span>💰</span> Wypłaty</a>
+      <div class="menu-separator"></div>
+      <a href="#" class="menu-item" id="btn-powrot"><span>←</span> Wszystkie biznesy</a>
+    </div>
+  </aside>
+
+  <main class="tresc">
+
+    <!-- DASHBOARD -->
+    <section id="strona-dashboard" class="strona aktywna">
+      <div class="naglowek"><h1>Dashboard</h1></div>
+      <div id="dash-statystyki" class="karty-statystyk"></div>
+      <div id="dash-lista" class="lista-biznesow"></div>
+    </section>
+
+    <!-- LISTA BIZNESÓW -->
+    <section id="strona-biznesy" class="strona">
+      <div class="naglowek">
+        <h1>Moje biznesy</h1>
+        <button class="btn-primary" id="btn-otworz-modal-biznes">+ Dodaj biznes</button>
+      </div>
+      <div id="lista-biznesow" class="lista-biznesow"></div>
+    </section>
+
+    <!-- WIDOK BIZNESU -->
+    <section id="strona-biznes" class="strona">
+      <!-- PRZEGLĄD -->
+      <div id="tab-przeglad" class="tab aktywna">
+        <div class="naglowek">
+          <div>
+            <h1 id="biznes-nazwa-naglowek">—</h1>
+            <p class="podtytul" id="biznes-branza-naglowek"></p>
+          </div>
+        </div>
+        <div id="bilans-karty" class="karty-statystyk"></div>
+        <div class="sekcja-info">
+          <h3>Opis</h3>
+          <p id="biznes-opis-tekst" class="tekst-szary">—</p>
+        </div>
+      </div>
+
+      <!-- PRACOWNICY -->
+      <div id="tab-pracownicy" class="tab">
+        <div class="naglowek">
+          <h1>Pracownicy</h1>
+          <button class="btn-primary" id="btn-dodaj-pracownika">+ Dodaj pracownika</button>
+        </div>
+        <div id="lista-pracownikow"></div>
+      </div>
+
+      <!-- WYJAZDY -->
+      <div id="tab-wyjazdy" class="tab">
+        <div class="naglowek">
+          <h1>Wyjazdy</h1>
+          <button class="btn-primary" id="btn-dodaj-wyjazd">+ Nowy wyjazd</button>
+        </div>
+        <div id="lista-wyjazdow"></div>
+      </div>
+
+      <!-- FAKTURY -->
+      <div id="tab-faktury" class="tab">
+        <div class="naglowek">
+          <h1>Faktury od kontrahenta</h1>
+          <button class="btn-primary" id="btn-dodaj-fakture">+ Dodaj fakturę</button>
+        </div>
+        <div id="lista-faktur"></div>
+      </div>
+
+      <!-- WYPŁATY -->
+      <div id="tab-wyplaty" class="tab">
+        <div class="naglowek">
+          <h1>Wypłaty pracowników</h1>
+          <button class="btn-primary" id="btn-dodaj-wyplate">+ Dodaj wypłatę</button>
+        </div>
+        <div id="lista-wyplat"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODALS -->
+  <div id="modal-overlay" class="modal-overlay ukryty">
+
+    <!-- Modal: Dodaj biznes -->
+    <div id="modal-biznes" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Nowy biznes</h2><button class="btn-zamknij" data-modal="modal-biznes">✕</button></div>
+      <form id="form-biznes">
+        <label>Nazwa *<input id="b-nazwa" type="text" required placeholder="np. Transport Spawalniczy"></label>
+        <label>Branża<input id="b-branza" type="text" placeholder="np. Spawalnictwo / Transport"></label>
+        <label>Opis<textarea id="b-opis" rows="3" placeholder="Krótki opis..."></textarea></label>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-biznes">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Dodaj pracownika -->
+    <div id="modal-pracownik" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Nowy pracownik</h2><button class="btn-zamknij" data-modal="modal-pracownik">✕</button></div>
+      <form id="form-pracownik">
+        <div class="form-row">
+          <label>Imię *<input id="p-imie" type="text" required></label>
+          <label>Nazwisko *<input id="p-nazwisko" type="text" required></label>
+        </div>
+        <label>Stanowisko<input id="p-stanowisko" type="text" value="Spawacz MIG/MAG"></label>
+        <div class="form-row">
+          <label>Wypłata miesięczna (PLN)<input id="p-wyplata" type="number" min="0" step="100" placeholder="0"></label>
+          <label>Ekipa
+            <select id="p-ekipa">
+              <option value="1">Ekipa 1</option>
+              <option value="2">Ekipa 2</option>
+            </select>
+          </label>
+        </div>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-pracownik">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Dodaj wyjazd -->
+    <div id="modal-wyjazd" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Nowy wyjazd</h2><button class="btn-zamknij" data-modal="modal-wyjazd">✕</button></div>
+      <form id="form-wyjazd">
+        <div class="form-row">
+          <label>Ekipa
+            <select id="w-ekipa">
+              <option value="1">Ekipa 1</option>
+              <option value="2">Ekipa 2</option>
+            </select>
+          </label>
+          <label>Miejsce we Francji *<input id="w-miejsce" type="text" required placeholder="np. Lyon"></label>
+        </div>
+        <div class="form-row">
+          <label>Data wyjazdu *<input id="w-data-wyjazdu" type="date" required></label>
+          <label>Planowany powrót<input id="w-data-powrotu" type="date"></label>
+        </div>
+        <label>Zaliczka na koszty drogowe (PLN)<input id="w-zaliczka" type="number" min="0" step="50" placeholder="0"></label>
+        <label>Notatki<textarea id="w-notatki" rows="2" placeholder="Dodatkowe informacje..."></textarea></label>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-wyjazd">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Dodaj fakturę -->
+    <div id="modal-faktura" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Faktura od kontrahenta</h2><button class="btn-zamknij" data-modal="modal-faktura">✕</button></div>
+      <form id="form-faktura">
+        <div class="form-row">
+          <label>Nr faktury<input id="f-numer" type="text" placeholder="np. FV/2024/001"></label>
+          <label>Kwota (PLN) *<input id="f-kwota" type="number" min="0" step="0.01" required></label>
+        </div>
+        <label>Data wystawienia *<input id="f-data" type="date" required></label>
+        <div class="form-row">
+          <label>Okres od<input id="f-okres-od" type="date"></label>
+          <label>Okres do<input id="f-okres-do" type="date"></label>
+        </div>
+        <label>Opis / Uwagi<textarea id="f-opis" rows="2" placeholder="np. Ekipa 1 — Lyon, 2 tygodnie"></textarea></label>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-faktura">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Dodaj wypłatę -->
+    <div id="modal-wyplata" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Wypłata pracownika</h2><button class="btn-zamknij" data-modal="modal-wyplata">✕</button></div>
+      <form id="form-wyplata">
+        <label>Pracownik *
+          <select id="wp-pracownik" required></select>
+        </label>
+        <div class="form-row">
+          <label>Kwota (PLN) *<input id="wp-kwota" type="number" min="0" step="100" required></label>
+          <label>Miesiąc *<input id="wp-miesiac" type="month" required></label>
+        </div>
+        <label>Data wypłaty<input id="wp-data" type="date"></label>
+        <label>Notatki<textarea id="wp-notatki" rows="2" placeholder="Uwagi..."></textarea></label>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-wyplata">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
