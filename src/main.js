@@ -90,6 +90,11 @@ async function initDatabase() {
     );
   `)
 
+  const kolumnyBiznesy = queryAll("PRAGMA table_info(biznesy)")
+  if (!kolumnyBiznesy.some(k => k.name === 'typ')) {
+    db.run("ALTER TABLE biznesy ADD COLUMN typ TEXT DEFAULT 'francja'")
+  }
+
   zapiszBaze()
   console.log('Baza danych gotowa:', dbPath)
 }
@@ -142,7 +147,7 @@ function createWindow() {
 ipcMain.handle('biznesy:pobierz', () => queryAll('SELECT * FROM biznesy ORDER BY data_dodania DESC'))
 
 ipcMain.handle('biznesy:dodaj', (e, d) => {
-  db.run('INSERT INTO biznesy (nazwa, branza, opis) VALUES (?, ?, ?)', [d.nazwa, d.branza, d.opis])
+  db.run('INSERT INTO biznesy (nazwa, branza, opis, typ) VALUES (?, ?, ?, ?)', [d.nazwa, d.branza, d.opis, d.typ || 'francja'])
   zapiszBaze()
   return queryOne('SELECT * FROM biznesy ORDER BY id DESC LIMIT 1')
 })

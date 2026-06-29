@@ -27,7 +27,7 @@
       <div class="menu-biznes-nazwa" id="sidebar-biznes-nazwa">—</div>
       <a href="#" class="menu-item" data-tab="przeglad"><span>📊</span> Przegląd</a>
       <a href="#" class="menu-item" data-tab="pracownicy"><span>👷</span> Pracownicy</a>
-      <a href="#" class="menu-item" data-tab="wyjazdy"><span>🚗</span> Wyjazdy</a>
+      <a href="#" class="menu-item" data-tab="wyjazdy" data-modul="francja"><span>🚗</span> Wyjazdy</a>
       <a href="#" class="menu-item" data-tab="faktury"><span>📄</span> Faktury</a>
       <a href="#" class="menu-item" data-tab="wyplaty"><span>💰</span> Wypłaty</a>
       <div class="menu-separator"></div>
@@ -80,7 +80,7 @@
       </div>
 
       <!-- WYJAZDY -->
-      <div id="tab-wyjazdy" class="tab">
+      <div id="tab-wyjazdy" class="tab" data-modul="francja">
         <div class="naglowek">
           <h1>Wyjazdy</h1>
           <button class="btn-primary" id="btn-dodaj-wyjazd">+ Nowy wyjazd</button>
@@ -117,6 +117,11 @@
       <div class="modal-naglowek"><h2>Nowy biznes</h2><button class="btn-zamknij" data-modal="modal-biznes">✕</button></div>
       <form id="form-biznes">
         <label>Nazwa *<input id="b-nazwa" type="text" required placeholder="np. Transport Spawalniczy"></label>
+        <label>Typ biznesu *
+          <select id="b-typ" required>
+            <option value="francja">Francja (wyjazdy i ekipy)</option>
+          </select>
+        </label>
         <label>Branża<input id="b-branza" type="text" placeholder="np. Spawalnictwo / Transport"></label>
         <label>Opis<textarea id="b-opis" rows="3" placeholder="Krótki opis..."></textarea></label>
         <div class="modal-przyciski">
@@ -137,7 +142,7 @@
         <label>Stanowisko<input id="p-stanowisko" type="text" value="Spawacz MIG/MAG"></label>
         <div class="form-row">
           <label>Wypłata miesięczna (PLN)<input id="p-wyplata" type="number" min="0" step="100" placeholder="0"></label>
-          <label>Ekipa
+          <label data-modul="francja">Ekipa
             <select id="p-ekipa">
               <option value="1">Ekipa 1</option>
               <option value="2">Ekipa 2</option>
@@ -156,7 +161,7 @@
       <div class="modal-naglowek"><h2>Nowy wyjazd</h2><button class="btn-zamknij" data-modal="modal-wyjazd">✕</button></div>
       <form id="form-wyjazd">
         <div class="form-row">
-          <label>Ekipa
+          <label data-modul="francja">Ekipa
             <select id="w-ekipa">
               <option value="1">Ekipa 1</option>
               <option value="2">Ekipa 2</option>
