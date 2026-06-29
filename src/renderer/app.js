@@ -230,8 +230,6 @@ $("form-biznes").addEventListener("submit", async (e) => {
   await window.api.biznesy.dodaj({
     nazwa: $("b-nazwa").value.trim(),
     typ: $("b-typ").value,
-    branza: $("b-branza").value.trim(),
-    opis: $("b-opis").value.trim(),
   });
   zamknijModal("modal-biznes");
   await ladujListeBiznesow();

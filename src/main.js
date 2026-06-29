@@ -147,7 +147,7 @@ function createWindow() {
 ipcMain.handle('biznesy:pobierz', () => queryAll('SELECT * FROM biznesy ORDER BY data_dodania DESC'))
 
 ipcMain.handle('biznesy:dodaj', (e, d) => {
-  db.run('INSERT INTO biznesy (nazwa, branza, opis, typ) VALUES (?, ?, ?, ?)', [d.nazwa, d.branza, d.opis, d.typ || 'francja'])
+  db.run('INSERT INTO biznesy (nazwa, branza, opis, typ) VALUES (?, ?, ?, ?)', [d.nazwa, d.branza || null, d.opis || null, d.typ || 'francja'])
   zapiszBaze()
   return queryOne('SELECT * FROM biznesy ORDER BY id DESC LIMIT 1')
 })
