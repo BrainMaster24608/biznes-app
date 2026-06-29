@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
   <title>Biznes App</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -30,6 +30,7 @@
       <a href="#" class="menu-item" data-tab="wyjazdy" data-modul="francja"><span>🚗</span> Wyjazdy</a>
       <a href="#" class="menu-item" data-tab="faktury"><span>📄</span> Faktury</a>
       <a href="#" class="menu-item" data-tab="wyplaty"><span>💰</span> Wypłaty</a>
+      <a href="#" class="menu-item" data-tab="pliki"><span>📁</span> Wszystkie pliki</a>
       <div class="menu-separator"></div>
       <a href="#" class="menu-item" id="btn-powrot"><span>←</span> Wszystkie biznesy</a>
     </div>
@@ -76,7 +77,28 @@
           <h1>Pracownicy</h1>
           <button class="btn-primary" id="btn-dodaj-pracownika">+ Dodaj pracownika</button>
         </div>
+        <div class="filtry-pasek">
+          <input id="pracownicy-szukaj" type="text" placeholder="Szukaj po imieniu, nazwisku, stanowisku...">
+          <select id="pracownicy-filtr-ekipa" data-modul="francja">
+            <option value="">Wszystkie ekipy</option>
+            <option value="1">Ekipa 1</option>
+            <option value="2">Ekipa 2</option>
+          </select>
+          <select id="pracownicy-filtr-umowa">
+            <option value="">Wszystkie typy umów</option>
+            <option value="Umowa o pracę">Umowa o pracę</option>
+            <option value="Umowa zlecenie">Umowa zlecenie</option>
+            <option value="Umowa o dzieło">Umowa o dzieło</option>
+            <option value="B2B / kontrakt">B2B / kontrakt</option>
+          </select>
+          <select id="pracownicy-filtr-status">
+            <option value="aktywny">Aktywni</option>
+            <option value="usuniety">Usunięci</option>
+            <option value="">Wszyscy</option>
+          </select>
+        </div>
         <div id="lista-pracownikow"></div>
+        <div id="pracownicy-paginacja" class="paginacja"></div>
       </div>
 
       <!-- WYJAZDY -->
@@ -85,7 +107,22 @@
           <h1>Wyjazdy</h1>
           <button class="btn-primary" id="btn-dodaj-wyjazd">+ Nowy wyjazd</button>
         </div>
+        <div id="kalendarz-wyjazdow"></div>
+        <div class="filtry-pasek">
+          <input id="wyjazdy-szukaj" type="text" placeholder="Szukaj po miejscu...">
+          <select id="wyjazdy-filtr-kto">
+            <option value="">Wszystkie</option>
+            <option value="0">Wszyscy</option>
+            <option value="1">Ekipa 1</option>
+            <option value="2">Ekipa 2</option>
+          </select>
+          <div class="filtry-daty">
+            <label class="filtr-data">Od <input id="wyjazdy-data-od" type="date"></label>
+            <label class="filtr-data">Do <input id="wyjazdy-data-do" type="date"></label>
+          </div>
+        </div>
         <div id="lista-wyjazdow"></div>
+        <div id="wyjazdy-paginacja" class="paginacja"></div>
       </div>
 
       <!-- FAKTURY -->
@@ -101,9 +138,29 @@
       <div id="tab-wyplaty" class="tab">
         <div class="naglowek">
           <h1>Wypłaty pracowników</h1>
-          <button class="btn-primary" id="btn-dodaj-wyplate">+ Dodaj wypłatę</button>
+          <div>
+            <button class="btn-secondary" id="btn-dodaj-wyplate-hurtowo">+ Dodaj hurtowo</button>
+            <button class="btn-primary" id="btn-dodaj-wyplate">+ Dodaj wypłatę</button>
+          </div>
         </div>
         <div id="lista-wyplat"></div>
+      </div>
+
+      <!-- WSZYSTKIE PLIKI -->
+      <div id="tab-pliki" class="tab">
+        <div class="naglowek">
+          <h1>Wszystkie pliki</h1>
+        </div>
+        <div class="filtry-pasek">
+          <input id="pliki-szukaj" type="text" placeholder="Szukaj po nazwie, pracowniku...">
+          <select id="pliki-filtr-typ">
+            <option value="">Wszystkie typy</option>
+            <option value="umowa">Umowa</option>
+            <option value="dokument">Dokument</option>
+          </select>
+        </div>
+        <div id="lista-plikow"></div>
+        <div id="pliki-paginacja" class="paginacja"></div>
       </div>
     </section>
 
@@ -131,7 +188,7 @@
 
     <!-- Modal: Dodaj pracownika -->
     <div id="modal-pracownik" class="modal ukryty">
-      <div class="modal-naglowek"><h2>Nowy pracownik</h2><button class="btn-zamknij" data-modal="modal-pracownik">✕</button></div>
+      <div class="modal-naglowek"><h2 id="modal-pracownik-tytul">Nowy pracownik</h2><button class="btn-zamknij" data-modal="modal-pracownik">✕</button></div>
       <form id="form-pracownik">
         <div class="form-row">
           <label>Imię *<input id="p-imie" type="text" required></label>
@@ -139,7 +196,7 @@
         </div>
         <label>Stanowisko<input id="p-stanowisko" type="text" value="Spawacz MIG/MAG"></label>
         <div class="form-row">
-          <label>Wypłata miesięczna (PLN)<input id="p-wyplata" type="number" min="0" step="100" placeholder="0"></label>
+          <label>Stawka godzinowa (PLN/h)<input id="p-stawka-godzinowa" type="number" min="0" step="0.5" placeholder="0"></label>
           <label data-modul="francja">Ekipa
             <select id="p-ekipa">
               <option value="1">Ekipa 1</option>
@@ -147,6 +204,38 @@
             </select>
           </label>
         </div>
+
+        <div class="menu-separator"></div>
+        <h3 class="tekst-szary">Dane personalne</h3>
+        <div class="form-row">
+          <label>Telefon<input id="p-telefon" type="tel" placeholder="np. 600 100 200"></label>
+          <label>E-mail<input id="p-email" type="email" placeholder="np. jan@przyklad.pl"></label>
+        </div>
+        <div class="form-row">
+          <label>PESEL<input id="p-pesel" type="text" maxlength="11" placeholder="11 cyfr"></label>
+          <label>Data urodzenia<input id="p-data-urodzenia" type="date"></label>
+        </div>
+        <label>Adres<input id="p-adres" type="text" placeholder="ul., kod, miasto"></label>
+        <div class="form-row">
+          <label>Nr dokumentu (dowód/paszport)<input id="p-nr-dokumentu" type="text"></label>
+          <label>Ważność dokumentu<input id="p-dokument-waznosc" type="date"></label>
+        </div>
+        <label>Nr konta bankowego<input id="p-nr-konta" type="text" placeholder="26 cyfr"></label>
+
+        <div class="menu-separator"></div>
+        <h3 class="tekst-szary">Umowa</h3>
+        <label>Typ umowy
+          <select id="p-typ-umowy">
+            <option value="">— wybierz —</option>
+            <option value="Umowa o pracę">Umowa o pracę</option>
+            <option value="Umowa zlecenie">Umowa zlecenie</option>
+            <option value="Umowa o dzieło">Umowa o dzieło</option>
+            <option value="B2B / kontrakt">B2B / kontrakt</option>
+          </select>
+        </label>
+        <label>Skan umowy<input id="p-plik-umowy" type="file" accept=".pdf,.jpg,.jpeg,.png"></label>
+        <p id="p-plik-aktualny" class="tekst-szary ukryty" style="font-size:12px;margin-top:-8px"></p>
+
         <div class="modal-przyciski">
           <button type="button" class="btn-secondary" data-modal="modal-pracownik">Anuluj</button>
           <button type="submit" class="btn-primary">Zapisz</button>
@@ -154,13 +243,37 @@
       </form>
     </div>
 
+    <!-- Modal: Szczegóły pracownika -->
+    <div id="modal-pracownik-szczegoly" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Szczegóły pracownika</h2><button class="btn-zamknij" data-modal="modal-pracownik-szczegoly">✕</button></div>
+
+      <h3 class="tekst-szary">Dokumenty</h3>
+      <div id="pracownik-dokumenty-lista"></div>
+      <form id="form-dokument-pracownik">
+        <div class="form-row">
+          <label>Nazwa dokumentu<input id="d-nazwa" type="text" required placeholder="np. Badania lekarskie, uprawnienia..."></label>
+          <label>Plik<input id="d-plik" type="file" required accept=".pdf,.jpg,.jpeg,.png"></label>
+        </div>
+        <button type="submit" class="btn-primary">+ Dodaj dokument</button>
+      </form>
+
+      <div class="menu-separator" style="margin-top:20px"></div>
+      <h3 class="tekst-szary">Dane personalne</h3>
+      <div id="pracownik-szczegoly-tresc" class="sekcja-info"></div>
+
+      <div class="modal-przyciski">
+        <button type="button" class="btn-secondary" data-modal="modal-pracownik-szczegoly">Zamknij</button>
+      </div>
+    </div>
+
     <!-- Modal: Dodaj wyjazd -->
     <div id="modal-wyjazd" class="modal ukryty">
-      <div class="modal-naglowek"><h2>Nowy wyjazd</h2><button class="btn-zamknij" data-modal="modal-wyjazd">✕</button></div>
+      <div class="modal-naglowek"><h2 id="modal-wyjazd-tytul">Nowy wyjazd</h2><button class="btn-zamknij" data-modal="modal-wyjazd">✕</button></div>
       <form id="form-wyjazd">
         <div class="form-row">
-          <label data-modul="francja">Ekipa
+          <label data-modul="francja">Kto jedzie
             <select id="w-ekipa">
+              <option value="0">Wszyscy</option>
               <option value="1">Ekipa 1</option>
               <option value="2">Ekipa 2</option>
             </select>
@@ -171,13 +284,27 @@
           <label>Data wyjazdu *<input id="w-data-wyjazdu" type="date" required></label>
           <label>Planowany powrót<input id="w-data-powrotu" type="date"></label>
         </div>
-        <label>Zaliczka na koszty drogowe (PLN)<input id="w-zaliczka" type="number" min="0" step="50" placeholder="0"></label>
+        <div class="form-row">
+          <label>Zaliczka na koszty drogowe (PLN)<input id="w-zaliczka" type="number" min="0" step="50" placeholder="0"></label>
+          <label>Faktycznie wydane (PLN)<input id="w-wydatki" type="number" min="0" step="50" placeholder="0"></label>
+        </div>
         <label>Notatki<textarea id="w-notatki" rows="2" placeholder="Dodatkowe informacje..."></textarea></label>
         <div class="modal-przyciski">
           <button type="button" class="btn-secondary" data-modal="modal-wyjazd">Anuluj</button>
           <button type="submit" class="btn-primary">Zapisz</button>
         </div>
       </form>
+    </div>
+
+    <!-- Modal: Szczegóły wyjazdu -->
+    <div id="modal-wyjazd-szczegoly" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Szczegóły wyjazdu</h2><button class="btn-zamknij" data-modal="modal-wyjazd-szczegoly">✕</button></div>
+      <div id="wyjazd-szczegoly-tresc" class="sekcja-info"></div>
+      <div class="modal-przyciski">
+        <button type="button" class="btn-secondary" data-modal="modal-wyjazd-szczegoly">Zamknij</button>
+        <button type="button" class="btn-secondary" id="btn-edytuj-z-modala">Edytuj</button>
+        <button type="button" class="btn-danger" id="btn-usun-z-modala">Usuń wyjazd</button>
+      </div>
     </div>
 
     <!-- Modal: Dodaj fakturę -->
@@ -209,14 +336,30 @@
           <select id="wp-pracownik" required></select>
         </label>
         <div class="form-row">
-          <label>Kwota (PLN) *<input id="wp-kwota" type="number" min="0" step="100" required></label>
+          <label>Liczba godzin *<input id="wp-godziny" type="number" min="0" step="0.5" required></label>
           <label>Miesiąc *<input id="wp-miesiac" type="month" required></label>
         </div>
-        <label>Data wypłaty<input id="wp-data" type="date"></label>
+        <p class="tekst-szary" style="font-size:13px">Do wypłaty: <strong id="wp-kwota-podglad">0,00 PLN</strong></p>
         <label>Notatki<textarea id="wp-notatki" rows="2" placeholder="Uwagi..."></textarea></label>
         <div class="modal-przyciski">
           <button type="button" class="btn-secondary" data-modal="modal-wyplata">Anuluj</button>
           <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Dodaj wypłaty hurtowo -->
+    <div id="modal-wyplata-hurtowo" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Hurtowe dodawanie wypłat</h2><button class="btn-zamknij" data-modal="modal-wyplata-hurtowo">✕</button></div>
+      <form id="form-wyplata-hurtowo">
+        <label>Miesiąc *<input id="wph-miesiac" type="month" required></label>
+        <label style="flex-direction:row;align-items:center;gap:8px;margin-top:10px">
+          <input id="wph-zaznacz-wszystkich" type="checkbox"> Zaznacz wszystkich
+        </label>
+        <div id="wph-lista-pracownikow" class="lista-dokumentow" style="margin-top:10px"></div>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-wyplata-hurtowo">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz wszystkie</button>
         </div>
       </form>
     </div>

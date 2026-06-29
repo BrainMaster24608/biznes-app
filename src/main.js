@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -7,6 +7,7 @@ let db
 let SQL
 
 const dbPath = path.join(app.getPath('userData'), 'biznes-app.db')
+const dokumentyPath = path.join(app.getPath('userData'), 'dokumenty')
 
 async function initDatabase() {
   const initSqlJs = require('sql.js')
@@ -34,10 +35,19 @@ async function initDatabase() {
       imie TEXT NOT NULL,
       nazwisko TEXT NOT NULL,
       stanowisko TEXT DEFAULT 'Spawacz MIG/MAG',
-      wyplata_miesieczna REAL DEFAULT 0,
+      stawka_godzinowa REAL DEFAULT 0,
       ekipa INTEGER DEFAULT 1,
       aktywny INTEGER DEFAULT 1,
       FOREIGN KEY (biznes_id) REFERENCES biznesy(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dokumenty_pracownika (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pracownik_id INTEGER NOT NULL,
+      nazwa TEXT NOT NULL,
+      plik TEXT NOT NULL,
+      data_dodania TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (pracownik_id) REFERENCES pracownicy(id)
     );
 
     CREATE TABLE IF NOT EXISTS wyjazdy (
@@ -48,6 +58,7 @@ async function initDatabase() {
       data_wyjazdu TEXT NOT NULL,
       data_powrotu TEXT,
       zaliczka REAL DEFAULT 0,
+      wydatki_rzeczywiste REAL,
       status TEXT DEFAULT 'w_trakcie',
       notatki TEXT,
       FOREIGN KEY (biznes_id) REFERENCES biznesy(id)
@@ -94,6 +105,35 @@ async function initDatabase() {
   if (!kolumnyBiznesy.some(k => k.name === 'typ')) {
     db.run("ALTER TABLE biznesy ADD COLUMN typ TEXT DEFAULT 'francja'")
   }
+
+  const nowePoaPracownika = [
+    'pesel TEXT', 'data_urodzenia TEXT', 'adres TEXT',
+    'telefon TEXT', 'email TEXT',
+    'nr_dokumentu TEXT', 'dokument_waznosc TEXT',
+    'nr_konta TEXT', 'typ_umowy TEXT', 'dokument_umowy TEXT',
+  ]
+  const kolumnyPracownicy = queryAll("PRAGMA table_info(pracownicy)")
+  if (kolumnyPracownicy.some(k => k.name === 'wyplata_miesieczna') && !kolumnyPracownicy.some(k => k.name === 'stawka_godzinowa')) {
+    db.run("ALTER TABLE pracownicy RENAME COLUMN wyplata_miesieczna TO stawka_godzinowa")
+  }
+  nowePoaPracownika.forEach(definicja => {
+    const nazwa = definicja.split(' ')[0]
+    if (!kolumnyPracownicy.some(k => k.name === nazwa) && nazwa !== 'stawka_godzinowa') {
+      db.run(`ALTER TABLE pracownicy ADD COLUMN ${definicja}`)
+    }
+  })
+
+  const kolumnyWyplaty = queryAll("PRAGMA table_info(wyplaty)")
+  if (!kolumnyWyplaty.some(k => k.name === 'godziny')) {
+    db.run("ALTER TABLE wyplaty ADD COLUMN godziny REAL")
+  }
+
+  const kolumnyWyjazdy = queryAll("PRAGMA table_info(wyjazdy)")
+  if (!kolumnyWyjazdy.some(k => k.name === 'wydatki_rzeczywiste')) {
+    db.run("ALTER TABLE wyjazdy ADD COLUMN wydatki_rzeczywiste REAL")
+  }
+
+  fs.mkdirSync(dokumentyPath, { recursive: true })
 
   zapiszBaze()
   console.log('Baza danych gotowa:', dbPath)
@@ -160,20 +200,113 @@ ipcMain.handle('biznesy:usun', (e, id) => {
 
 // ---- PRACOWNICY ----
 ipcMain.handle('pracownicy:pobierz', (e, biznes_id) =>
-  queryAll('SELECT * FROM pracownicy WHERE biznes_id = ? AND aktywny = 1 ORDER BY ekipa, nazwisko', [biznes_id])
+  queryAll('SELECT * FROM pracownicy WHERE biznes_id = ? ORDER BY aktywny DESC, ekipa, nazwisko', [biznes_id])
 )
 
 ipcMain.handle('pracownicy:dodaj', (e, d) => {
   db.run(
-    'INSERT INTO pracownicy (biznes_id, imie, nazwisko, stanowisko, wyplata_miesieczna, ekipa) VALUES (?, ?, ?, ?, ?, ?)',
-    [d.biznes_id, d.imie, d.nazwisko, d.stanowisko, d.wyplata_miesieczna, d.ekipa]
+    `INSERT INTO pracownicy (
+      biznes_id, imie, nazwisko, stanowisko, stawka_godzinowa, ekipa,
+      pesel, data_urodzenia, adres, telefon, email,
+      nr_dokumentu, dokument_waznosc, nr_konta, typ_umowy, dokument_umowy
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      d.biznes_id, d.imie, d.nazwisko, d.stanowisko, d.stawka_godzinowa, d.ekipa,
+      d.pesel || null, d.data_urodzenia || null, d.adres || null, d.telefon || null, d.email || null,
+      d.nr_dokumentu || null, d.dokument_waznosc || null, d.nr_konta || null, d.typ_umowy || null, d.dokument_umowy || null,
+    ]
   )
   zapiszBaze()
   return queryOne('SELECT * FROM pracownicy ORDER BY id DESC LIMIT 1')
 })
 
+ipcMain.handle('pracownicy:edytuj', (e, d) => {
+  db.run(
+    `UPDATE pracownicy SET
+      imie = ?, nazwisko = ?, stanowisko = ?, stawka_godzinowa = ?, ekipa = ?,
+      pesel = ?, data_urodzenia = ?, adres = ?, telefon = ?, email = ?,
+      nr_dokumentu = ?, dokument_waznosc = ?, nr_konta = ?, typ_umowy = ?, dokument_umowy = ?
+    WHERE id = ?`,
+    [
+      d.imie, d.nazwisko, d.stanowisko, d.stawka_godzinowa, d.ekipa,
+      d.pesel || null, d.data_urodzenia || null, d.adres || null, d.telefon || null, d.email || null,
+      d.nr_dokumentu || null, d.dokument_waznosc || null, d.nr_konta || null, d.typ_umowy || null, d.dokument_umowy || null,
+      d.id,
+    ]
+  )
+  zapiszBaze()
+  return queryOne('SELECT * FROM pracownicy WHERE id = ?', [d.id])
+})
+
 ipcMain.handle('pracownicy:usun', (e, id) => {
   db.run('UPDATE pracownicy SET aktywny = 0 WHERE id = ?', [id])
+  zapiszBaze()
+  return { sukces: true }
+})
+
+ipcMain.handle('pracownicy:przywroc', (e, id) => {
+  db.run('UPDATE pracownicy SET aktywny = 1 WHERE id = ?', [id])
+  zapiszBaze()
+  return { sukces: true }
+})
+
+ipcMain.handle('pracownicy:wgraj-plik', (e, { nazwaPliku, dataBuffer }) => {
+  const rozszerzenie = path.extname(nazwaPliku)
+  const nazwaZapisu = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${rozszerzenie}`
+  fs.writeFileSync(path.join(dokumentyPath, nazwaZapisu), Buffer.from(dataBuffer))
+  return nazwaZapisu
+})
+
+ipcMain.handle('pracownicy:otworz-plik', (e, nazwaZapisu) => {
+  shell.openPath(path.join(dokumentyPath, nazwaZapisu))
+})
+
+ipcMain.handle('pracownicy:usun-dokument-umowy', (e, id) => {
+  const p = queryOne('SELECT dokument_umowy FROM pracownicy WHERE id = ?', [id])
+  if (p && p.dokument_umowy) {
+    fs.rmSync(path.join(dokumentyPath, p.dokument_umowy), { force: true })
+  }
+  db.run('UPDATE pracownicy SET dokument_umowy = NULL WHERE id = ?', [id])
+  zapiszBaze()
+  return { sukces: true }
+})
+
+ipcMain.handle('pliki:pobierz', (e, biznes_id) =>
+  queryAll(`
+    SELECT 'umowa' as typ, p.id as ref_id, p.id as pracownik_id, p.imie, p.nazwisko,
+           'Skan umowy' as nazwa, p.dokument_umowy as plik, NULL as data_dodania
+    FROM pracownicy p
+    WHERE p.biznes_id = ? AND p.dokument_umowy IS NOT NULL
+    UNION ALL
+    SELECT 'dokument' as typ, d.id as ref_id, d.pracownik_id, p.imie, p.nazwisko,
+           d.nazwa, d.plik, d.data_dodania
+    FROM dokumenty_pracownika d
+    JOIN pracownicy p ON d.pracownik_id = p.id
+    WHERE p.biznes_id = ?
+    ORDER BY data_dodania DESC
+  `, [biznes_id, biznes_id])
+)
+
+// ---- DOKUMENTY PRACOWNIKA ----
+ipcMain.handle('dokumenty:pobierz', (e, pracownik_id) =>
+  queryAll('SELECT * FROM dokumenty_pracownika WHERE pracownik_id = ? ORDER BY data_dodania DESC', [pracownik_id])
+)
+
+ipcMain.handle('dokumenty:dodaj', (e, d) => {
+  db.run(
+    'INSERT INTO dokumenty_pracownika (pracownik_id, nazwa, plik) VALUES (?, ?, ?)',
+    [d.pracownik_id, d.nazwa, d.plik]
+  )
+  zapiszBaze()
+  return queryOne('SELECT * FROM dokumenty_pracownika ORDER BY id DESC LIMIT 1')
+})
+
+ipcMain.handle('dokumenty:usun', (e, id) => {
+  const dokument = queryOne('SELECT * FROM dokumenty_pracownika WHERE id = ?', [id])
+  if (dokument) {
+    fs.rmSync(path.join(dokumentyPath, dokument.plik), { force: true })
+  }
+  db.run('DELETE FROM dokumenty_pracownika WHERE id = ?', [id])
   zapiszBaze()
   return { sukces: true }
 })
@@ -185,15 +318,27 @@ ipcMain.handle('wyjazdy:pobierz', (e, biznes_id) =>
 
 ipcMain.handle('wyjazdy:dodaj', (e, d) => {
   db.run(
-    'INSERT INTO wyjazdy (biznes_id, ekipa, miejsce, data_wyjazdu, data_powrotu, zaliczka, notatki) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [d.biznes_id, d.ekipa, d.miejsce, d.data_wyjazdu, d.data_powrotu, d.zaliczka, d.notatki]
+    'INSERT INTO wyjazdy (biznes_id, ekipa, miejsce, data_wyjazdu, data_powrotu, zaliczka, wydatki_rzeczywiste, notatki) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [d.biznes_id, d.ekipa, d.miejsce, d.data_wyjazdu, d.data_powrotu, d.zaliczka, d.wydatki_rzeczywiste, d.notatki]
   )
   zapiszBaze()
   return queryOne('SELECT * FROM wyjazdy ORDER BY id DESC LIMIT 1')
 })
 
-ipcMain.handle('wyjazdy:zamknij', (e, id) => {
-  db.run('UPDATE wyjazdy SET status = ? WHERE id = ?', ['zakończony', id])
+ipcMain.handle('wyjazdy:edytuj', (e, d) => {
+  db.run(
+    `UPDATE wyjazdy SET
+      ekipa = ?, miejsce = ?, data_wyjazdu = ?, data_powrotu = ?,
+      zaliczka = ?, wydatki_rzeczywiste = ?, notatki = ?
+    WHERE id = ?`,
+    [d.ekipa, d.miejsce, d.data_wyjazdu, d.data_powrotu, d.zaliczka, d.wydatki_rzeczywiste, d.notatki, d.id]
+  )
+  zapiszBaze()
+  return queryOne('SELECT * FROM wyjazdy WHERE id = ?', [d.id])
+})
+
+ipcMain.handle('wyjazdy:usun', (e, id) => {
+  db.run('DELETE FROM wyjazdy WHERE id = ?', [id])
   zapiszBaze()
   return { sukces: true }
 })
@@ -256,10 +401,26 @@ ipcMain.handle('wyplaty:pobierz', (e, biznes_id) =>
 )
 
 ipcMain.handle('wyplaty:dodaj', (e, d) => {
+  const pracownik = queryOne('SELECT stawka_godzinowa FROM pracownicy WHERE id = ?', [d.pracownik_id])
+  const kwota = (d.godziny || 0) * (pracownik?.stawka_godzinowa || 0)
   db.run(
-    'INSERT INTO wyplaty (pracownik_id, biznes_id, kwota, miesiac, data_wyplaty, notatki) VALUES (?, ?, ?, ?, ?, ?)',
-    [d.pracownik_id, d.biznes_id, d.kwota, d.miesiac, d.data_wyplaty, d.notatki]
+    'INSERT INTO wyplaty (pracownik_id, biznes_id, godziny, kwota, miesiac, notatki) VALUES (?, ?, ?, ?, ?, ?)',
+    [d.pracownik_id, d.biznes_id, d.godziny, kwota, d.miesiac, d.notatki || null]
   )
+  zapiszBaze()
+  return { sukces: true }
+})
+
+ipcMain.handle('wyplaty:dodaj-hurtowo', (e, d) => {
+  d.wpisy.forEach((wpis) => {
+    if (!wpis.godziny) return
+    const pracownik = queryOne('SELECT stawka_godzinowa FROM pracownicy WHERE id = ?', [wpis.pracownik_id])
+    const kwota = wpis.godziny * (pracownik?.stawka_godzinowa || 0)
+    db.run(
+      'INSERT INTO wyplaty (pracownik_id, biznes_id, godziny, kwota, miesiac) VALUES (?, ?, ?, ?, ?)',
+      [wpis.pracownik_id, d.biznes_id, wpis.godziny, kwota, d.miesiac]
+    )
+  })
   zapiszBaze()
   return { sukces: true }
 })
@@ -269,16 +430,17 @@ ipcMain.handle('bilans:pobierz', (e, biznes_id) => {
   const przychody = queryOne('SELECT COALESCE(SUM(kwota), 0) as suma FROM faktury_przychody WHERE biznes_id = ?', [biznes_id])
   const wyplaty = queryOne('SELECT COALESCE(SUM(kwota), 0) as suma FROM wyplaty WHERE biznes_id = ?', [biznes_id])
   const kosztyRaw = db.exec(`
-    SELECT COALESCE(SUM(k.kwota), 0) as suma 
+    SELECT COALESCE(SUM(k.kwota), 0) as suma
     FROM koszty_transport k
     JOIN wyjazdy w ON k.wyjazd_id = w.id
     WHERE w.biznes_id = ?
   `, [biznes_id])
   const koszty = kosztyRaw.length ? kosztyRaw[0].values[0][0] : 0
+  const wydatkiWyjazdy = queryOne('SELECT COALESCE(SUM(wydatki_rzeczywiste), 0) as suma FROM wyjazdy WHERE biznes_id = ?', [biznes_id])
 
   const suma_przychodow = przychody?.suma || 0
   const suma_wyplat = wyplaty?.suma || 0
-  const suma_kosztow = koszty || 0
+  const suma_kosztow = (koszty || 0) + (wydatkiWyjazdy?.suma || 0)
 
   return {
     przychody: suma_przychodow,

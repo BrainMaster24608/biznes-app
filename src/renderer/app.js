@@ -24,6 +24,39 @@ const pln = (kwota) =>
   }) + " PLN";
 const $ = (id) => document.getElementById(id);
 
+const ROZMIAR_STRONY = 10;
+
+function stronicuj(lista, strona) {
+  const start = (strona - 1) * ROZMIAR_STRONY;
+  return lista.slice(start, start + ROZMIAR_STRONY);
+}
+
+function renderujPaginacje(kontenerId, calkowitaLiczba, strona, ustawStroneFn) {
+  const kontener = $(kontenerId);
+  const liczbaStron = Math.max(1, Math.ceil(calkowitaLiczba / ROZMIAR_STRONY));
+  if (liczbaStron <= 1) {
+    kontener.innerHTML = "";
+    return;
+  }
+
+  const przyciskiStron = [];
+  for (let i = 1; i <= liczbaStron; i++) {
+    przyciskiStron.push(
+      `<button data-strona="${i}" class="${i === strona ? "aktywna" : ""}">${i}</button>`,
+    );
+  }
+
+  kontener.innerHTML = `
+    <button data-strona="${strona - 1}" ${strona === 1 ? "disabled" : ""}>‹</button>
+    ${przyciskiStron.join("")}
+    <button data-strona="${strona + 1}" ${strona === liczbaStron ? "disabled" : ""}>›</button>
+  `;
+
+  kontener.querySelectorAll("button[data-strona]:not(:disabled)").forEach((btn) => {
+    btn.addEventListener("click", () => ustawStroneFn(parseInt(btn.dataset.strona)));
+  });
+}
+
 // ---- MODALS ----
 const overlay = $("modal-overlay");
 
@@ -140,6 +173,7 @@ async function otworzBiznes(id) {
     ladujWyjazdy(),
     ladujFaktury(),
     ladujWyplaty(),
+    ladujPliki(),
   ]);
   await ladujBilans();
 
@@ -269,67 +303,337 @@ async function ladujBilans() {
 }
 
 // ---- PRACOWNICY ----
+let edytowanyPracownikId = null;
+let sortPracownicy = { kolumna: "nazwisko", kierunek: 1 };
+let stronaPracownicy = 1;
+
 async function ladujPracownikow() {
   pracownicy = await window.api.pracownicy.pobierz(aktywnyBiznes.id);
   renderujPracownikow();
 }
 
+function strzalkaSort(aktualnaKolumna, kolumna, kierunek) {
+  if (aktualnaKolumna !== kolumna) return "";
+  return `<span class="strzalka">${kierunek === 1 ? "↑" : "↓"}</span>`;
+}
+
+function filtrowaniSortowaniPracownicy() {
+  const szukaj = $("pracownicy-szukaj").value.trim().toLowerCase();
+  const filtrEkipa = $("pracownicy-filtr-ekipa").value;
+  const filtrUmowa = $("pracownicy-filtr-umowa").value;
+  const filtrStatus = $("pracownicy-filtr-status").value;
+
+  let wynik = pracownicy.filter((p) => {
+    if (
+      szukaj &&
+      !`${p.imie} ${p.nazwisko} ${p.stanowisko || ""}`.toLowerCase().includes(szukaj)
+    )
+      return false;
+    if (filtrEkipa && String(p.ekipa) !== filtrEkipa) return false;
+    if (filtrUmowa && p.typ_umowy !== filtrUmowa) return false;
+    if (filtrStatus === "aktywny" && !p.aktywny) return false;
+    if (filtrStatus === "usuniety" && p.aktywny) return false;
+    return true;
+  });
+
+  const { kolumna, kierunek } = sortPracownicy;
+  wynik.sort((a, b) => {
+    let va = a[kolumna] ?? "";
+    let vb = b[kolumna] ?? "";
+    if (typeof va === "string") va = va.toLowerCase();
+    if (typeof vb === "string") vb = vb.toLowerCase();
+    if (va < vb) return -kierunek;
+    if (va > vb) return kierunek;
+    return 0;
+  });
+
+  return wynik;
+}
+
+function ustawStronePracownicy(strona) {
+  stronaPracownicy = strona;
+  renderujPracownikow();
+}
+
+function ustawSortowaniePracownicy(kolumna) {
+  if (sortPracownicy.kolumna === kolumna) {
+    sortPracownicy.kierunek *= -1;
+  } else {
+    sortPracownicy = { kolumna, kierunek: 1 };
+  }
+  stronaPracownicy = 1;
+  renderujPracownikow();
+}
+
 function renderujPracownikow() {
-  const renderKarta = (p) => `
-    <div class="karta-pracownik">
-      <div class="pracownik-info">
-        <span class="pracownik-imie">${esc(p.imie)} ${esc(p.nazwisko)}</span>
-        <span class="pracownik-szczeg">${esc(p.stanowisko)} · Wypłata: ${pln(p.wyplata_miesieczna)}/mies.</span>
-      </div>
-      <button class="btn-danger" data-usun-pracownika="${p.id}">Usuń</button>
-    </div>
-  `;
+  if (!pracownicy.length) {
+    $("lista-pracownikow").innerHTML =
+      `<div class="pusty-stan"><div class="duza-ikona">👷</div><p>Brak zarejestrowanych pracowników.</p></div>`;
+    $("pracownicy-paginacja").innerHTML = "";
+    return;
+  }
 
   const modul = MODULY[aktywnyBiznes.typ] || MODULY.francja;
+  const widoczni = filtrowaniSortowaniPracownicy();
+  const { kolumna, kierunek } = sortPracownicy;
 
-  if (modul.maEkipy) {
-    const renderEkipa = (lista, nr) => {
-      if (!lista.length)
-        return `
-        <div class="ekipa-sekcja">
-          <div class="ekipa-naglowek">Ekipa ${nr}</div>
-          <div class="pusty-stan" style="padding:20px"><p>Brak pracowników w ekipie ${nr}</p></div>
-        </div>`;
-      return `
-        <div class="ekipa-sekcja">
-          <div class="ekipa-naglowek">Ekipa ${nr}</div>
-          ${lista.map(renderKarta).join("")}
-        </div>`;
-    };
-    const ekipa1 = pracownicy.filter((p) => p.ekipa == 1);
-    const ekipa2 = pracownicy.filter((p) => p.ekipa == 2);
+  if (!widoczni.length) {
     $("lista-pracownikow").innerHTML =
-      renderEkipa(ekipa1, 1) + renderEkipa(ekipa2, 2);
-  } else {
-    $("lista-pracownikow").innerHTML = pracownicy.map(renderKarta).join("");
+      `<div class="pusty-stan"><div class="duza-ikona">🔍</div><p>Brak pracowników spełniających kryteria filtrowania.</p></div>`;
+    $("pracownicy-paginacja").innerHTML = "";
+    return;
   }
+
+  const maxStrona = Math.max(1, Math.ceil(widoczni.length / ROZMIAR_STRONY));
+  if (stronaPracownicy > maxStrona) stronaPracownicy = maxStrona;
+  const naStronie = stronicuj(widoczni, stronaPracownicy);
+
+  $("lista-pracownikow").innerHTML = `
+    <div class="tabela-wrapper">
+      <table>
+        <thead><tr>
+          <th class="sortowalna" data-sort="nazwisko">Imię i nazwisko ${strzalkaSort(kolumna, "nazwisko", kierunek)}</th>
+          <th class="sortowalna" data-sort="stanowisko">Stanowisko ${strzalkaSort(kolumna, "stanowisko", kierunek)}</th>
+          ${modul.maEkipy ? `<th class="sortowalna" data-sort="ekipa">Ekipa ${strzalkaSort(kolumna, "ekipa", kierunek)}</th>` : ""}
+          <th>Telefon</th><th>E-mail</th><th>Typ umowy</th>
+          <th class="sortowalna" data-sort="stawka_godzinowa">Stawka godz. ${strzalkaSort(kolumna, "stawka_godzinowa", kierunek)}</th>
+          <th>Dokument</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${naStronie
+            .map(
+              (p) => `
+            <tr>
+              <td><strong>${esc(p.imie)} ${esc(p.nazwisko)}</strong></td>
+              <td>${esc(p.stanowisko)}</td>
+              ${modul.maEkipy ? `<td><span class="badge">Ekipa ${p.ekipa}</span></td>` : ""}
+              <td>${esc(p.telefon) || "—"}</td>
+              <td>${esc(p.email) || "—"}</td>
+              <td>${esc(p.typ_umowy) || "—"}</td>
+              <td>${pln(p.stawka_godzinowa)}/h</td>
+              <td>${p.dokument_umowy ? `<button class="btn-ikona" data-otworz-plik="${esc(p.dokument_umowy)}" title="Otwórz dokument">📎</button>` : "—"}</td>
+              <td><span class="badge ${p.aktywny ? "zielony" : "czerwony"}">${p.aktywny ? "Aktywny" : "Usunięty"}</span></td>
+              <td>
+                <div class="akcje-ikony">
+                  <button class="btn-ikona" data-szczegoly-pracownika="${p.id}" title="Szczegóły">👁️</button>
+                  ${p.aktywny
+                    ? `<button class="btn-ikona" data-edytuj-pracownika="${p.id}" title="Edytuj">✏️</button>
+                       <button class="btn-ikona btn-ikona-danger" data-usun-pracownika="${p.id}" title="Usuń">🗑️</button>`
+                    : `<button class="btn-ikona" data-przywroc-pracownika="${p.id}" title="Przywróć">↩️</button>`}
+                </div>
+              </td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 
   document.querySelectorAll("[data-usun-pracownika]").forEach((btn) => {
     btn.addEventListener("click", () =>
       usunPracownika(parseInt(btn.dataset.usunPracownika)),
     );
   });
+  document.querySelectorAll("[data-przywroc-pracownika]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      przywrocPracownika(parseInt(btn.dataset.przywrocPracownika)),
+    );
+  });
+  document.querySelectorAll("[data-szczegoly-pracownika]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      pokazSzczegolyPracownika(parseInt(btn.dataset.szczegolyPracownika)),
+    );
+  });
+  document.querySelectorAll("[data-edytuj-pracownika]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      otworzEdycjePracownika(parseInt(btn.dataset.edytujPracownika)),
+    );
+  });
+  document.querySelectorAll("[data-otworz-plik]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      window.api.pracownicy.otworzPlik(btn.dataset.otworzPlik),
+    );
+  });
+  document.querySelectorAll("#lista-pracownikow th.sortowalna").forEach((th) => {
+    th.addEventListener("click", () => ustawSortowaniePracownicy(th.dataset.sort));
+  });
+
+  renderujPaginacje("pracownicy-paginacja", widoczni.length, stronaPracownicy, ustawStronePracownicy);
 }
 
-$("btn-dodaj-pracownika").addEventListener("click", () =>
-  pokazModal("modal-pracownik"),
-);
+["pracownicy-szukaj", "pracownicy-filtr-ekipa", "pracownicy-filtr-umowa", "pracownicy-filtr-status"].forEach((id) => {
+  $(id).addEventListener("input", () => {
+    stronaPracownicy = 1;
+    renderujPracownikow();
+  });
+});
+
+let aktywnyPracownikSzczegolyId = null;
+
+async function pokazSzczegolyPracownika(id) {
+  const p = pracownicy.find((p) => p.id === id);
+  if (!p) return;
+  aktywnyPracownikSzczegolyId = id;
+  const wiersz = (etykieta, wartosc) => `
+    <p><strong>${etykieta}:</strong> ${esc(wartosc) || "—"}</p>
+  `;
+  $("pracownik-szczegoly-tresc").innerHTML = `
+    ${wiersz("PESEL", p.pesel)}
+    ${wiersz("Data urodzenia", p.data_urodzenia)}
+    ${wiersz("Adres", p.adres)}
+    ${wiersz("Nr dokumentu", p.nr_dokumentu)}
+    ${wiersz("Ważność dokumentu", p.dokument_waznosc)}
+    ${wiersz("Nr konta bankowego", p.nr_konta)}
+  `;
+  await ladujDokumentyPracownika(id);
+  pokazModal("modal-pracownik-szczegoly");
+}
+
+async function ladujDokumentyPracownika(pracownik_id) {
+  const dokumenty = await window.api.dokumenty.pobierz(pracownik_id);
+  renderujDokumentyPracownika(dokumenty);
+}
+
+function renderujDokumentyPracownika(dokumenty) {
+  if (!dokumenty.length) {
+    $("pracownik-dokumenty-lista").innerHTML =
+      `<p class="tekst-szary" style="font-size:13px">Brak dodatkowych dokumentów.</p>`;
+    return;
+  }
+  $("pracownik-dokumenty-lista").innerHTML = `
+    <div class="lista-dokumentow">
+      ${dokumenty
+        .map(
+          (d) => `
+        <div class="dokument-wiersz">
+          <div class="dokument-info">
+            <span class="dokument-nazwa">${esc(d.nazwa)}</span>
+            <span class="dokument-data">${esc(d.data_dodania)}</span>
+          </div>
+          <div class="akcje-ikony">
+            <button class="btn-ikona" data-otworz-dokument="${esc(d.plik)}" title="Otwórz">📎</button>
+            <button class="btn-ikona btn-ikona-danger" data-usun-dokument="${d.id}" title="Usuń">🗑️</button>
+          </div>
+        </div>
+      `,
+        )
+        .join("")}
+    </div>
+  `;
+  document.querySelectorAll("[data-otworz-dokument]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      window.api.pracownicy.otworzPlik(btn.dataset.otworzDokument),
+    );
+  });
+  document.querySelectorAll("[data-usun-dokument]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      usunDokumentPracownika(parseInt(btn.dataset.usunDokument)),
+    );
+  });
+}
+
+async function usunDokumentPracownika(id) {
+  if (!confirm("Usunąć dokument?")) return;
+  await window.api.dokumenty.usun(id);
+  await ladujDokumentyPracownika(aktywnyPracownikSzczegolyId);
+  await ladujPliki();
+}
+
+$("form-dokument-pracownik").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const plik = $("d-plik").files[0];
+  if (!plik) return;
+  const dataBuffer = await plik.arrayBuffer();
+  const nazwaZapisu = await window.api.pracownicy.wgrajPlik(plik.name, dataBuffer);
+  await window.api.dokumenty.dodaj({
+    pracownik_id: aktywnyPracownikSzczegolyId,
+    nazwa: $("d-nazwa").value.trim(),
+    plik: nazwaZapisu,
+  });
+  e.target.reset();
+  await ladujDokumentyPracownika(aktywnyPracownikSzczegolyId);
+  await ladujPliki();
+});
+
+$("btn-dodaj-pracownika").addEventListener("click", () => {
+  edytowanyPracownikId = null;
+  $("modal-pracownik-tytul").textContent = "Nowy pracownik";
+  $("p-plik-aktualny").classList.add("ukryty");
+  pokazModal("modal-pracownik");
+});
+
+function otworzEdycjePracownika(id) {
+  const p = pracownicy.find((p) => p.id === id);
+  if (!p) return;
+  edytowanyPracownikId = id;
+  $("modal-pracownik-tytul").textContent = "Edytuj pracownika";
+
+  $("p-imie").value = p.imie || "";
+  $("p-nazwisko").value = p.nazwisko || "";
+  $("p-stanowisko").value = p.stanowisko || "";
+  $("p-stawka-godzinowa").value = p.stawka_godzinowa || "";
+  $("p-ekipa").value = p.ekipa || 1;
+  $("p-telefon").value = p.telefon || "";
+  $("p-email").value = p.email || "";
+  $("p-pesel").value = p.pesel || "";
+  $("p-data-urodzenia").value = p.data_urodzenia || "";
+  $("p-adres").value = p.adres || "";
+  $("p-nr-dokumentu").value = p.nr_dokumentu || "";
+  $("p-dokument-waznosc").value = p.dokument_waznosc || "";
+  $("p-nr-konta").value = p.nr_konta || "";
+  $("p-typ-umowy").value = p.typ_umowy || "";
+
+  if (p.dokument_umowy) {
+    $("p-plik-aktualny").textContent = `Obecny plik: ${p.dokument_umowy} (wybierz nowy, aby zastąpić)`;
+    $("p-plik-aktualny").classList.remove("ukryty");
+  } else {
+    $("p-plik-aktualny").classList.add("ukryty");
+  }
+
+  pokazModal("modal-pracownik");
+}
 
 $("form-pracownik").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await window.api.pracownicy.dodaj({
-    biznes_id: aktywnyBiznes.id,
+
+  const edytowanyPracownik = edytowanyPracownikId
+    ? pracownicy.find((p) => p.id === edytowanyPracownikId)
+    : null;
+  let dokument_umowy = edytowanyPracownik?.dokument_umowy || null;
+  const plik = $("p-plik-umowy").files[0];
+  if (plik) {
+    const dataBuffer = await plik.arrayBuffer();
+    dokument_umowy = await window.api.pracownicy.wgrajPlik(plik.name, dataBuffer);
+  }
+
+  const dane = {
     imie: $("p-imie").value.trim(),
     nazwisko: $("p-nazwisko").value.trim(),
     stanowisko: $("p-stanowisko").value.trim(),
-    wyplata_miesieczna: parseFloat($("p-wyplata").value) || 0,
+    stawka_godzinowa: parseFloat($("p-stawka-godzinowa").value) || 0,
     ekipa: parseInt($("p-ekipa").value),
-  });
+    telefon: $("p-telefon").value.trim(),
+    email: $("p-email").value.trim(),
+    pesel: $("p-pesel").value.trim(),
+    data_urodzenia: $("p-data-urodzenia").value,
+    adres: $("p-adres").value.trim(),
+    nr_dokumentu: $("p-nr-dokumentu").value.trim(),
+    dokument_waznosc: $("p-dokument-waznosc").value,
+    nr_konta: $("p-nr-konta").value.trim(),
+    typ_umowy: $("p-typ-umowy").value,
+    dokument_umowy,
+  };
+
+  if (edytowanyPracownikId) {
+    await window.api.pracownicy.edytuj({ id: edytowanyPracownikId, ...dane });
+  } else {
+    await window.api.pracownicy.dodaj({ biznes_id: aktywnyBiznes.id, ...dane });
+  }
+  await ladujPliki();
+
+  edytowanyPracownikId = null;
   zamknijModal("modal-pracownik");
   await ladujPracownikow();
 });
@@ -340,9 +644,77 @@ async function usunPracownika(id) {
   await ladujPracownikow();
 }
 
+async function przywrocPracownika(id) {
+  if (!confirm("Przywrócić pracownika?")) return;
+  await window.api.pracownicy.przywroc(id);
+  await ladujPracownikow();
+}
+
 // ---- WYJAZDY ----
+const dzisiajData = new Date();
+let kalendarzRok = dzisiajData.getFullYear();
+let kalendarzMiesiac = dzisiajData.getMonth();
+
+function etykietaEkipy(ekipa) {
+  return ekipa === 0 ? "Wszyscy" : `Ekipa ${ekipa}`;
+}
+function klasaPaskaEkipy(ekipa) {
+  if (ekipa === 0) return "pasek-wszyscy";
+  return ekipa === 1 ? "pasek-ekipa1" : "pasek-ekipa2";
+}
+const isoData = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+let sortWyjazdy = { kolumna: "data_wyjazdu", kierunek: -1 };
+let stronaWyjazdy = 1;
+
 async function ladujWyjazdy() {
   wyjazdy = await window.api.wyjazdy.pobierz(aktywnyBiznes.id);
+  renderujWyjazdy();
+  renderujKalendarzWyjazdow();
+}
+
+function filtrowaniSortowanieWyjazdy() {
+  const szukaj = $("wyjazdy-szukaj").value.trim().toLowerCase();
+  const filtrKto = $("wyjazdy-filtr-kto").value;
+  const dataOd = $("wyjazdy-data-od").value;
+  const dataDo = $("wyjazdy-data-do").value;
+
+  let wynik = wyjazdy.filter((w) => {
+    if (szukaj && !w.miejsce.toLowerCase().includes(szukaj)) return false;
+    if (filtrKto !== "" && String(w.ekipa) !== filtrKto) return false;
+    const koniecWyjazdu = w.data_powrotu || w.data_wyjazdu;
+    if (dataOd && koniecWyjazdu < dataOd) return false;
+    if (dataDo && w.data_wyjazdu > dataDo) return false;
+    return true;
+  });
+
+  const { kolumna, kierunek } = sortWyjazdy;
+  wynik.sort((a, b) => {
+    let va = a[kolumna] ?? "";
+    let vb = b[kolumna] ?? "";
+    if (typeof va === "string") va = va.toLowerCase();
+    if (typeof vb === "string") vb = vb.toLowerCase();
+    if (va < vb) return -kierunek;
+    if (va > vb) return kierunek;
+    return 0;
+  });
+
+  return wynik;
+}
+
+function ustawStroneWyjazdy(strona) {
+  stronaWyjazdy = strona;
+  renderujWyjazdy();
+}
+
+function ustawSortowanieWyjazdy(kolumna) {
+  if (sortWyjazdy.kolumna === kolumna) {
+    sortWyjazdy.kierunek *= -1;
+  } else {
+    sortWyjazdy = { kolumna, kierunek: 1 };
+  }
+  stronaWyjazdy = 1;
   renderujWyjazdy();
 }
 
@@ -350,27 +722,53 @@ function renderujWyjazdy() {
   if (!wyjazdy.length) {
     $("lista-wyjazdow").innerHTML =
       `<div class="pusty-stan"><div class="duza-ikona">🚗</div><p>Brak zarejestrowanych wyjazdów.</p></div>`;
+    $("wyjazdy-paginacja").innerHTML = "";
     return;
   }
+
+  const widoczne = filtrowaniSortowanieWyjazdy();
+  const { kolumna, kierunek } = sortWyjazdy;
+
+  if (!widoczne.length) {
+    $("lista-wyjazdow").innerHTML =
+      `<div class="pusty-stan"><div class="duza-ikona">🔍</div><p>Brak wyjazdów spełniających kryteria filtrowania.</p></div>`;
+    $("wyjazdy-paginacja").innerHTML = "";
+    return;
+  }
+
+  const maxStrona = Math.max(1, Math.ceil(widoczne.length / ROZMIAR_STRONY));
+  if (stronaWyjazdy > maxStrona) stronaWyjazdy = maxStrona;
+  const naStronie = stronicuj(widoczne, stronaWyjazdy);
+
   $("lista-wyjazdow").innerHTML = `
     <div class="tabela-wrapper">
       <table>
         <thead><tr>
-          <th>Ekipa</th><th>Miejsce</th><th>Wyjazd</th><th>Powrót</th>
-          <th>Zaliczka</th><th>Status</th><th></th>
+          <th class="sortowalna" data-sort="ekipa">Kto jedzie ${strzalkaSort(kolumna, "ekipa", kierunek)}</th>
+          <th class="sortowalna" data-sort="miejsce">Miejsce ${strzalkaSort(kolumna, "miejsce", kierunek)}</th>
+          <th class="sortowalna" data-sort="data_wyjazdu">Wyjazd ${strzalkaSort(kolumna, "data_wyjazdu", kierunek)}</th>
+          <th class="sortowalna" data-sort="data_powrotu">Powrót ${strzalkaSort(kolumna, "data_powrotu", kierunek)}</th>
+          <th class="sortowalna" data-sort="zaliczka">Zaliczka ${strzalkaSort(kolumna, "zaliczka", kierunek)}</th>
+          <th class="sortowalna" data-sort="wydatki_rzeczywiste">Wydatki ${strzalkaSort(kolumna, "wydatki_rzeczywiste", kierunek)}</th>
+          <th></th>
         </tr></thead>
         <tbody>
-          ${wyjazdy
+          ${naStronie
             .map(
               (w) => `
             <tr>
-              <td><span class="badge">Ekipa ${w.ekipa}</span></td>
+              <td><span class="badge">${etykietaEkipy(w.ekipa)}</span></td>
               <td><strong>${esc(w.miejsce)}</strong></td>
               <td>${w.data_wyjazdu || "—"}</td>
               <td>${w.data_powrotu || "—"}</td>
               <td>${pln(w.zaliczka)}</td>
-              <td><span class="badge ${w.status === "zakończony" ? "zielony" : "zolty"}">${w.status === "zakończony" ? "Zakończony" : "W trakcie"}</span></td>
-              <td>${w.status !== "zakończony" ? `<button class="btn-success" data-zamknij="${w.id}">Zakończ</button>` : ""}</td>
+              <td>${w.wydatki_rzeczywiste != null ? pln(w.wydatki_rzeczywiste) : "—"}</td>
+              <td>
+                <div class="akcje-ikony">
+                  <button class="btn-ikona" data-edytuj-wyjazd="${w.id}" title="Edytuj">✏️</button>
+                  <button class="btn-ikona btn-ikona-danger" data-usun-wyjazd="${w.id}" title="Usuń">🗑️</button>
+                </div>
+              </td>
             </tr>
           `,
             )
@@ -380,37 +778,248 @@ function renderujWyjazdy() {
     </div>
   `;
 
-  document.querySelectorAll("[data-zamknij]").forEach((btn) => {
+  document.querySelectorAll("[data-usun-wyjazd]").forEach((btn) => {
     btn.addEventListener("click", () =>
-      zamknijWyjazd(parseInt(btn.dataset.zamknij)),
+      usunWyjazd(parseInt(btn.dataset.usunWyjazd)),
+    );
+  });
+  document.querySelectorAll("[data-edytuj-wyjazd]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      otworzEdycjeWyjazdu(parseInt(btn.dataset.edytujWyjazd)),
+    );
+  });
+  document.querySelectorAll("#lista-wyjazdow th.sortowalna").forEach((th) => {
+    th.addEventListener("click", () => ustawSortowanieWyjazdy(th.dataset.sort));
+  });
+
+  renderujPaginacje("wyjazdy-paginacja", widoczne.length, stronaWyjazdy, ustawStroneWyjazdy);
+}
+
+["wyjazdy-szukaj", "wyjazdy-filtr-kto", "wyjazdy-data-od", "wyjazdy-data-do"].forEach((id) => {
+  $(id).addEventListener("input", () => {
+    stronaWyjazdy = 1;
+    renderujWyjazdy();
+  });
+});
+
+// ---- KALENDARZ WYJAZDÓW ----
+function tygodnieMiesiaca(rok, miesiac) {
+  const ostatniDnia = new Date(rok, miesiac + 1, 0);
+  const pierwszyDnia = new Date(rok, miesiac, 1);
+  const startOffset = (pierwszyDnia.getDay() + 6) % 7; // 0 = poniedziałek
+  let cursor = new Date(rok, miesiac, 1 - startOffset);
+  const tygodnie = [];
+  do {
+    const tydzien = [];
+    for (let i = 0; i < 7; i++) {
+      tydzien.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    tygodnie.push(tydzien);
+  } while (tygodnie[tygodnie.length - 1][6] < ostatniDnia);
+  return tygodnie;
+}
+
+function segmentyTygodnia(tydzien, wszystkieWyjazdy) {
+  const tydzienStart = isoData(tydzien[0]);
+  const tydzienEnd = isoData(tydzien[6]);
+  const segmenty = [];
+
+  wszystkieWyjazdy.forEach((w) => {
+    const start = w.data_wyjazdu;
+    const koniec = w.data_powrotu && w.data_powrotu >= start ? w.data_powrotu : start;
+    if (!start || koniec < tydzienStart || start > tydzienEnd) return;
+
+    let startCol = tydzien.findIndex((d) => isoData(d) >= start);
+    if (startCol === -1) startCol = 0;
+    let endCol = 6;
+    for (let i = 6; i >= 0; i--) {
+      if (isoData(tydzien[i]) <= koniec) {
+        endCol = i;
+        break;
+      }
+    }
+    segmenty.push({ wyjazd: w, startCol, endCol });
+  });
+
+  segmenty.sort((a, b) => a.startCol - b.startCol);
+  const laneEnds = [];
+  segmenty.forEach((seg) => {
+    let lane = laneEnds.findIndex((endCol) => endCol < seg.startCol);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(seg.endCol);
+    } else {
+      laneEnds[lane] = seg.endCol;
+    }
+    seg.lane = lane;
+  });
+  return segmenty;
+}
+
+function renderujKalendarzWyjazdow() {
+  const nazwyMiesiecy = [
+    "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
+    "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień",
+  ];
+  const tygodnie = tygodnieMiesiaca(kalendarzRok, kalendarzMiesiac);
+  const dzisiajIso = isoData(new Date());
+
+  const tygodnieHtml = tygodnie
+    .map((tydzien) => {
+      const segmenty = segmentyTygodnia(tydzien, wyjazdy);
+      const dniHtml = tydzien
+        .map((d) => {
+          const klasy = ["kalendarz-dzien"];
+          if (d.getMonth() !== kalendarzMiesiac) klasy.push("poza-miesiacem");
+          if (isoData(d) === dzisiajIso) klasy.push("dzisiaj");
+          return `<div class="${klasy.join(" ")}">${d.getDate()}</div>`;
+        })
+        .join("");
+      const paskiHtml = segmenty
+        .map(
+          (seg) => `
+        <div class="kalendarz-pasek ${klasaPaskaEkipy(seg.wyjazd.ekipa)}"
+             style="grid-column:${seg.startCol + 1} / ${seg.endCol + 2}; grid-row:${seg.lane + 1}"
+             data-szczegoly-wyjazdu="${seg.wyjazd.id}"
+             title="${esc(seg.wyjazd.miejsce)} — ${etykietaEkipy(seg.wyjazd.ekipa)}">${esc(seg.wyjazd.miejsce)}</div>
+      `,
+        )
+        .join("");
+      return `
+        <div class="kalendarz-tydzien">
+          <div class="kalendarz-dni-tygodnia">${dniHtml}</div>
+          <div class="kalendarz-paski">${paskiHtml}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  $("kalendarz-wyjazdow").innerHTML = `
+    <div class="kalendarz">
+      <div class="kalendarz-naglowek">
+        <button class="btn-secondary" id="btn-miesiac-poprzedni">←</button>
+        <div class="kalendarz-tytul">${nazwyMiesiecy[kalendarzMiesiac]} ${kalendarzRok}</div>
+        <button class="btn-secondary" id="btn-miesiac-nastepny">→</button>
+      </div>
+      <div class="kalendarz-dni-naglowek">
+        <span>Pn</span><span>Wt</span><span>Śr</span><span>Cz</span><span>Pt</span><span>Sb</span><span>Nd</span>
+      </div>
+      ${tygodnieHtml}
+      <div class="kalendarz-legenda">
+        <span><i style="background:var(--akcent)"></i> Wszyscy</span>
+        <span><i style="background:var(--zielony)"></i> Ekipa 1</span>
+        <span><i style="background:var(--zolty)"></i> Ekipa 2</span>
+      </div>
+    </div>
+  `;
+
+  $("btn-miesiac-poprzedni").addEventListener("click", () => zmienMiesiacKalendarza(-1));
+  $("btn-miesiac-nastepny").addEventListener("click", () => zmienMiesiacKalendarza(1));
+  document.querySelectorAll("[data-szczegoly-wyjazdu]").forEach((el) => {
+    el.addEventListener("click", () =>
+      pokazSzczegolyWyjazdu(parseInt(el.dataset.szczegolyWyjazdu)),
     );
   });
 }
 
-$("btn-dodaj-wyjazd").addEventListener("click", () =>
-  pokazModal("modal-wyjazd"),
-);
+function zmienMiesiacKalendarza(delta) {
+  kalendarzMiesiac += delta;
+  if (kalendarzMiesiac < 0) {
+    kalendarzMiesiac = 11;
+    kalendarzRok--;
+  } else if (kalendarzMiesiac > 11) {
+    kalendarzMiesiac = 0;
+    kalendarzRok++;
+  }
+  renderujKalendarzWyjazdow();
+}
+
+let edytowanyWyjazdId = null;
+
+function pokazSzczegolyWyjazdu(id) {
+  const w = wyjazdy.find((w) => w.id === id);
+  if (!w) return;
+  $("wyjazd-szczegoly-tresc").innerHTML = `
+    <p><strong>Kto jedzie:</strong> ${etykietaEkipy(w.ekipa)}</p>
+    <p><strong>Miejsce:</strong> ${esc(w.miejsce)}</p>
+    <p><strong>Data wyjazdu:</strong> ${w.data_wyjazdu || "—"}</p>
+    <p><strong>Data powrotu:</strong> ${w.data_powrotu || "—"}</p>
+    <p><strong>Zaliczka:</strong> ${pln(w.zaliczka)}</p>
+    <p><strong>Faktycznie wydane:</strong> ${w.wydatki_rzeczywiste != null ? pln(w.wydatki_rzeczywiste) : "—"}</p>
+    <p><strong>Notatki:</strong> ${esc(w.notatki) || "—"}</p>
+  `;
+  $("btn-usun-z-modala").onclick = async () => {
+    await usunWyjazd(w.id);
+    zamknijModal("modal-wyjazd-szczegoly");
+  };
+  $("btn-edytuj-z-modala").onclick = () => {
+    zamknijModal("modal-wyjazd-szczegoly");
+    otworzEdycjeWyjazdu(w.id);
+  };
+  pokazModal("modal-wyjazd-szczegoly");
+}
+
+function otworzEdycjeWyjazdu(id) {
+  const w = wyjazdy.find((w) => w.id === id);
+  if (!w) return;
+  edytowanyWyjazdId = id;
+  $("modal-wyjazd-tytul").textContent = "Edytuj wyjazd";
+
+  $("w-ekipa").value = w.ekipa;
+  $("w-miejsce").value = w.miejsce || "";
+  $("w-data-wyjazdu").value = w.data_wyjazdu || "";
+  $("w-data-powrotu").value = w.data_powrotu || "";
+  $("w-zaliczka").value = w.zaliczka || "";
+  $("w-wydatki").value = w.wydatki_rzeczywiste ?? "";
+  $("w-notatki").value = w.notatki || "";
+
+  pokazModal("modal-wyjazd");
+}
+
+$("btn-dodaj-wyjazd").addEventListener("click", () => {
+  edytowanyWyjazdId = null;
+  $("modal-wyjazd-tytul").textContent = "Nowy wyjazd";
+  pokazModal("modal-wyjazd");
+});
 
 $("form-wyjazd").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await window.api.wyjazdy.dodaj({
-    biznes_id: aktywnyBiznes.id,
+
+  const data_wyjazdu = $("w-data-wyjazdu").value;
+  const data_powrotu = $("w-data-powrotu").value;
+  if (data_powrotu && data_powrotu < data_wyjazdu) {
+    alert("Data powrotu nie może być wcześniejsza niż data wyjazdu.");
+    return;
+  }
+
+  const dane = {
     ekipa: parseInt($("w-ekipa").value),
     miejsce: $("w-miejsce").value.trim(),
-    data_wyjazdu: $("w-data-wyjazdu").value,
-    data_powrotu: $("w-data-powrotu").value,
+    data_wyjazdu,
+    data_powrotu,
     zaliczka: parseFloat($("w-zaliczka").value) || 0,
+    wydatki_rzeczywiste: $("w-wydatki").value === "" ? null : parseFloat($("w-wydatki").value),
     notatki: $("w-notatki").value.trim(),
-  });
+  };
+
+  if (edytowanyWyjazdId) {
+    await window.api.wyjazdy.edytuj({ id: edytowanyWyjazdId, ...dane });
+  } else {
+    await window.api.wyjazdy.dodaj({ biznes_id: aktywnyBiznes.id, ...dane });
+  }
+
+  edytowanyWyjazdId = null;
   zamknijModal("modal-wyjazd");
   await ladujWyjazdy();
   await ladujBilans();
 });
 
-async function zamknijWyjazd(id) {
-  if (!confirm("Oznaczyć wyjazd jako zakończony?")) return;
-  await window.api.wyjazdy.zamknij(id);
+async function usunWyjazd(id) {
+  if (!confirm("Usunąć wyjazd?")) return;
+  await window.api.wyjazdy.usun(id);
   await ladujWyjazdy();
+  await ladujBilans();
 }
 
 // ---- FAKTURY ----
@@ -498,7 +1107,7 @@ function renderujWyplaty() {
   $("lista-wyplat").innerHTML = `
     <div class="tabela-wrapper">
       <table>
-        <thead><tr><th>Pracownik</th><th>Ekipa</th><th>Kwota</th><th>Miesiąc</th><th>Data wypłaty</th><th>Notatki</th></tr></thead>
+        <thead><tr><th>Pracownik</th><th>Ekipa</th><th>Godziny</th><th>Kwota</th><th>Miesiąc</th><th>Notatki</th></tr></thead>
         <tbody>
           ${wyplaty
             .map(
@@ -506,9 +1115,9 @@ function renderujWyplaty() {
             <tr>
               <td><strong>${esc(w.imie)} ${esc(w.nazwisko)}</strong></td>
               <td><span class="badge">Ekipa ${w.ekipa}</span></td>
+              <td>${w.godziny ?? "—"}</td>
               <td style="color:var(--czerwony);font-weight:600">${pln(w.kwota)}</td>
               <td>${w.miesiac || "—"}</td>
-              <td>${w.data_wyplaty || "—"}</td>
               <td style="color:var(--tekst2)">${esc(w.notatki) || "—"}</td>
             </tr>
           `,
@@ -520,34 +1129,258 @@ function renderujWyplaty() {
   `;
 }
 
+function odswiezPodgladKwoty() {
+  const p = pracownicy.find((p) => p.id == $("wp-pracownik").value);
+  const godziny = parseFloat($("wp-godziny").value) || 0;
+  const kwota = godziny * (p?.stawka_godzinowa || 0);
+  $("wp-kwota-podglad").textContent = pln(kwota);
+}
+
 $("btn-dodaj-wyplate").addEventListener("click", () => {
   $("wp-pracownik").innerHTML = pracownicy
+    .filter((p) => p.aktywny)
     .map(
       (p) =>
-        `<option value="${p.id}">${p.imie} ${p.nazwisko} (Ekipa ${p.ekipa}) — ${pln(p.wyplata_miesieczna)}/mies.</option>`,
+        `<option value="${p.id}">${p.imie} ${p.nazwisko} (Ekipa ${p.ekipa}) — stawka: ${pln(p.stawka_godzinowa)}/h</option>`,
     )
     .join("");
+  odswiezPodgladKwoty();
   pokazModal("modal-wyplata");
 });
 
-$("wp-pracownik").addEventListener("change", () => {
-  const p = pracownicy.find((p) => p.id == $("wp-pracownik").value);
-  if (p) $("wp-kwota").value = p.wyplata_miesieczna;
-});
+$("wp-pracownik").addEventListener("change", odswiezPodgladKwoty);
+$("wp-godziny").addEventListener("input", odswiezPodgladKwoty);
 
 $("form-wyplata").addEventListener("submit", async (e) => {
   e.preventDefault();
   await window.api.wyplaty.dodaj({
     biznes_id: aktywnyBiznes.id,
     pracownik_id: parseInt($("wp-pracownik").value),
-    kwota: parseFloat($("wp-kwota").value),
+    godziny: parseFloat($("wp-godziny").value) || 0,
     miesiac: $("wp-miesiac").value,
-    data_wyplaty: $("wp-data").value,
     notatki: $("wp-notatki").value.trim(),
   });
   zamknijModal("modal-wyplata");
   await ladujWyplaty();
   await ladujBilans();
+});
+
+// ---- WYPŁATY HURTOWO ----
+$("btn-dodaj-wyplate-hurtowo").addEventListener("click", () => {
+  const aktywniPracownicy = pracownicy.filter((p) => p.aktywny);
+  if (!aktywniPracownicy.length) {
+    alert("Brak aktywnych pracowników.");
+    return;
+  }
+  $("wph-zaznacz-wszystkich").checked = false;
+  $("wph-lista-pracownikow").innerHTML = aktywniPracownicy
+    .map(
+      (p) => `
+    <div class="dokument-wiersz">
+      <div class="dokument-info" style="flex-direction:row;align-items:center;gap:10px">
+        <input type="checkbox" class="wph-zaznacz" data-pracownik-id="${p.id}">
+        <div>
+          <div class="dokument-nazwa">${esc(p.imie)} ${esc(p.nazwisko)}</div>
+          <div class="dokument-data">Stawka: ${pln(p.stawka_godzinowa)}/h</div>
+        </div>
+      </div>
+      <label style="flex-direction:row;align-items:center;gap:8px">Godziny
+        <input type="number" min="0" step="0.5" class="wph-godziny" data-pracownik-id="${p.id}" style="width:90px" placeholder="0">
+      </label>
+    </div>
+  `,
+    )
+    .join("");
+  pokazModal("modal-wyplata-hurtowo");
+});
+
+$("wph-zaznacz-wszystkich").addEventListener("change", (e) => {
+  document.querySelectorAll(".wph-zaznacz").forEach((checkbox) => {
+    checkbox.checked = e.target.checked;
+  });
+});
+
+$("form-wyplata-hurtowo").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const zaznaczeni = new Set(
+    Array.from(document.querySelectorAll(".wph-zaznacz:checked")).map(
+      (checkbox) => checkbox.dataset.pracownikId,
+    ),
+  );
+
+  const wpisy = Array.from(document.querySelectorAll(".wph-godziny"))
+    .filter((input) => zaznaczeni.has(input.dataset.pracownikId))
+    .map((input) => ({
+      pracownik_id: parseInt(input.dataset.pracownikId),
+      godziny: parseFloat(input.value) || 0,
+    }))
+    .filter((w) => w.godziny > 0);
+
+  if (!zaznaczeni.size) {
+    alert("Zaznacz przynajmniej jednego pracownika.");
+    return;
+  }
+  if (!wpisy.length) {
+    alert("Wpisz liczbę godzin dla zaznaczonych pracowników.");
+    return;
+  }
+
+  await window.api.wyplaty.dodajHurtowo({
+    biznes_id: aktywnyBiznes.id,
+    miesiac: $("wph-miesiac").value,
+    wpisy,
+  });
+  zamknijModal("modal-wyplata-hurtowo");
+  await ladujWyplaty();
+  await ladujBilans();
+});
+
+// ---- WSZYSTKIE PLIKI ----
+let pliki = [];
+let sortPliki = { kolumna: "data_dodania", kierunek: -1 };
+let stronaPliki = 1;
+
+async function ladujPliki() {
+  pliki = await window.api.pliki.pobierz(aktywnyBiznes.id);
+  renderujPliki();
+}
+
+function etykietaTypuPliku(typ) {
+  return typ === "umowa" ? "Umowa" : "Dokument";
+}
+
+function filtrowaniSortowaniePliki() {
+  const szukaj = $("pliki-szukaj").value.trim().toLowerCase();
+  const filtrTyp = $("pliki-filtr-typ").value;
+
+  let wynik = pliki.filter((p) => {
+    if (
+      szukaj &&
+      !`${p.imie} ${p.nazwisko} ${p.nazwa}`.toLowerCase().includes(szukaj)
+    )
+      return false;
+    if (filtrTyp && p.typ !== filtrTyp) return false;
+    return true;
+  });
+
+  const { kolumna, kierunek } = sortPliki;
+  wynik.sort((a, b) => {
+    let va = kolumna === "pracownik" ? `${a.imie} ${a.nazwisko}` : a[kolumna] ?? "";
+    let vb = kolumna === "pracownik" ? `${b.imie} ${b.nazwisko}` : b[kolumna] ?? "";
+    if (typeof va === "string") va = va.toLowerCase();
+    if (typeof vb === "string") vb = vb.toLowerCase();
+    if (va < vb) return -kierunek;
+    if (va > vb) return kierunek;
+    return 0;
+  });
+
+  return wynik;
+}
+
+function ustawStronePliki(strona) {
+  stronaPliki = strona;
+  renderujPliki();
+}
+
+function ustawSortowaniePliki(kolumna) {
+  if (sortPliki.kolumna === kolumna) {
+    sortPliki.kierunek *= -1;
+  } else {
+    sortPliki = { kolumna, kierunek: 1 };
+  }
+  stronaPliki = 1;
+  renderujPliki();
+}
+
+function renderujPliki() {
+  if (!pliki.length) {
+    $("lista-plikow").innerHTML =
+      `<div class="pusty-stan"><div class="duza-ikona">📁</div><p>Brak dodanych plików.</p></div>`;
+    $("pliki-paginacja").innerHTML = "";
+    return;
+  }
+
+  const widoczne = filtrowaniSortowaniePliki();
+  const { kolumna, kierunek } = sortPliki;
+
+  if (!widoczne.length) {
+    $("lista-plikow").innerHTML =
+      `<div class="pusty-stan"><div class="duza-ikona">🔍</div><p>Brak plików spełniających kryteria filtrowania.</p></div>`;
+    $("pliki-paginacja").innerHTML = "";
+    return;
+  }
+
+  const maxStrona = Math.max(1, Math.ceil(widoczne.length / ROZMIAR_STRONY));
+  if (stronaPliki > maxStrona) stronaPliki = maxStrona;
+  const naStronie = stronicuj(widoczne, stronaPliki);
+
+  $("lista-plikow").innerHTML = `
+    <div class="tabela-wrapper">
+      <table>
+        <thead><tr>
+          <th class="sortowalna" data-sort="pracownik">Pracownik ${strzalkaSort(kolumna, "pracownik", kierunek)}</th>
+          <th class="sortowalna" data-sort="nazwa">Nazwa ${strzalkaSort(kolumna, "nazwa", kierunek)}</th>
+          <th class="sortowalna" data-sort="typ">Typ ${strzalkaSort(kolumna, "typ", kierunek)}</th>
+          <th class="sortowalna" data-sort="data_dodania">Data dodania ${strzalkaSort(kolumna, "data_dodania", kierunek)}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${naStronie
+            .map(
+              (p) => `
+            <tr>
+              <td><strong>${esc(p.imie)} ${esc(p.nazwisko)}</strong></td>
+              <td>${esc(p.nazwa)}</td>
+              <td><span class="badge ${p.typ === "umowa" ? "" : "zielony"}">${etykietaTypuPliku(p.typ)}</span></td>
+              <td>${esc(p.data_dodania) || "—"}</td>
+              <td>
+                <div class="akcje-ikony">
+                  <button class="btn-ikona" data-otworz-plik-wszystkie="${esc(p.plik)}" title="Otwórz">📎</button>
+                  <button class="btn-ikona btn-ikona-danger" data-usun-plik="${p.ref_id}" data-usun-plik-typ="${p.typ}" title="Usuń">🗑️</button>
+                </div>
+              </td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.querySelectorAll("[data-otworz-plik-wszystkie]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      window.api.pracownicy.otworzPlik(btn.dataset.otworzPlikWszystkie),
+    );
+  });
+  document.querySelectorAll("[data-usun-plik]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      usunPlikZListy(parseInt(btn.dataset.usunPlik), btn.dataset.usunPlikTyp),
+    );
+  });
+  document.querySelectorAll("#lista-plikow th.sortowalna").forEach((th) => {
+    th.addEventListener("click", () => ustawSortowaniePliki(th.dataset.sort));
+  });
+
+  renderujPaginacje("pliki-paginacja", widoczne.length, stronaPliki, ustawStronePliki);
+}
+
+async function usunPlikZListy(ref_id, typ) {
+  if (!confirm("Usunąć ten plik?")) return;
+  if (typ === "umowa") {
+    await window.api.pracownicy.usunDokumentUmowy(ref_id);
+    await ladujPracownikow();
+  } else {
+    await window.api.dokumenty.usun(ref_id);
+  }
+  await ladujPliki();
+}
+
+["pliki-szukaj", "pliki-filtr-typ"].forEach((id) => {
+  $(id).addEventListener("input", () => {
+    stronaPliki = 1;
+    renderujPliki();
+  });
 });
 
 // ---- START ----

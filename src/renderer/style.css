@@ -118,7 +118,6 @@ body {
 }
 .strona {
   display: none;
-  max-width: 960px;
 }
 .strona.aktywna {
   display: block;
@@ -228,6 +227,10 @@ h3 {
   background: rgba(245, 158, 11, 0.15);
   color: var(--zolty);
 }
+.badge.czerwony {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--czerwony);
+}
 .karta-akcje {
   display: flex;
   gap: 8px;
@@ -238,7 +241,7 @@ h3 {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-x: auto;
   margin-bottom: 20px;
 }
 table {
@@ -264,6 +267,93 @@ td {
 }
 tr:hover td {
   background: var(--bg3);
+}
+th.sortowalna {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortowalna:hover {
+  color: var(--tekst);
+}
+th.sortowalna .strzalka {
+  margin-left: 4px;
+  opacity: 0.6;
+}
+
+/* FILTRY */
+.filtry-pasek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.filtry-pasek input,
+.filtry-pasek select {
+  margin: 0;
+  height: 38px;
+  box-sizing: border-box;
+}
+.filtry-pasek input[type="text"] {
+  flex: 1;
+  min-width: 200px;
+}
+.filtry-pasek select {
+  min-width: 160px;
+}
+.filtry-pasek .filtry-daty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.filtry-pasek .filtr-data {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--tekst2);
+}
+.filtry-pasek .filtr-data input {
+  min-width: 0;
+  width: 130px;
+}
+
+/* PAGINACJA */
+.paginacja {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 20px;
+}
+.paginacja button {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--tekst2);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.paginacja button:hover:not(:disabled) {
+  border-color: var(--akcent);
+  color: var(--tekst);
+}
+.paginacja button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.paginacja button.aktywna {
+  background: var(--akcent);
+  border-color: var(--akcent);
+  color: white;
+}
+.paginacja .paginacja-info {
+  font-size: 12px;
+  color: var(--tekst2);
+  margin: 0 8px;
 }
 
 /* PRACOWNICY — karty per ekipa */
@@ -302,6 +392,104 @@ tr:hover td {
   color: var(--tekst2);
 }
 
+/* KALENDARZ WYJAZDÓW */
+.kalendarz {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.kalendarz-naglowek {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.kalendarz-tytul {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+}
+.kalendarz-nawigacja {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.kalendarz-dni-naglowek {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+.kalendarz-dni-naglowek span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--tekst2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+}
+.kalendarz-tydzien {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+.kalendarz-dni-tygodnia {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.kalendarz-dzien {
+  font-size: 12px;
+  color: var(--tekst2);
+  text-align: center;
+  padding: 2px 0 6px;
+}
+.kalendarz-dzien.poza-miesiacem {
+  opacity: 0.35;
+}
+.kalendarz-dzien.dzisiaj {
+  color: var(--akcent);
+  font-weight: 700;
+}
+.kalendarz-paski {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 22px;
+  row-gap: 3px;
+  padding-bottom: 6px;
+}
+.kalendarz-pasek {
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.kalendarz-pasek.pasek-wszyscy { background: var(--akcent); }
+.kalendarz-pasek.pasek-ekipa1 { background: var(--zielony); }
+.kalendarz-pasek.pasek-ekipa2 { background: var(--zolty); }
+.kalendarz-legenda {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--tekst2);
+}
+.kalendarz-legenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kalendarz-legenda i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
 /* SEKCJA INFO */
 .sekcja-info {
   background: var(--bg2);
@@ -309,6 +497,36 @@ tr:hover td {
   border-radius: var(--radius);
   padding: 20px;
   margin-bottom: 20px;
+}
+
+/* LISTA DOKUMENTÓW */
+.lista-dokumentow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.dokument-wiersz {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.dokument-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dokument-nazwa {
+  font-weight: 500;
+  font-size: 13px;
+}
+.dokument-data {
+  font-size: 11px;
+  color: var(--tekst2);
 }
 
 /* PUSTY STAN */
@@ -377,6 +595,34 @@ tr:hover td {
   color: white;
 }
 
+.akcje-ikony {
+  display: flex;
+  gap: 4px;
+}
+.btn-ikona {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--tekst2);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.btn-ikona:hover {
+  border-color: var(--akcent);
+  color: var(--tekst);
+}
+.btn-ikona.btn-ikona-danger:hover {
+  background: var(--czerwony);
+  border-color: var(--czerwony);
+  color: white;
+}
+
 /* MODAL */
 .modal-overlay {
   position: fixed;
@@ -395,6 +641,8 @@ tr:hover td {
   border: 1px solid var(--border);
   border-radius: 14px;
   width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
   padding: 28px;
 }
 .modal.ukryty {
@@ -444,7 +692,17 @@ select {
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s;
+}
+textarea {
   resize: vertical;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  accent-color: var(--akcent);
 }
 input:focus,
 textarea:focus,
