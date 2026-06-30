@@ -52,6 +52,7 @@
         <button class="btn-primary" id="btn-otworz-modal-biznes">+ Dodaj biznes</button>
       </div>
       <div id="lista-biznesow" class="lista-biznesow"></div>
+      <div id="biznesy-paginacja" class="paginacja"></div>
     </section>
 
     <!-- WIDOK BIZNESU -->
@@ -61,14 +62,14 @@
         <div class="naglowek">
           <div>
             <h1 id="biznes-nazwa-naglowek">—</h1>
-            <p class="podtytul" id="biznes-branza-naglowek"></p>
+          </div>
+          <div class="naglowek-przyciski">
+            <input id="bilans-miesiac" type="month">
+            <button class="btn-secondary" id="btn-bilans-wyczysc-miesiac">Cały okres</button>
           </div>
         </div>
         <div id="bilans-karty" class="karty-statystyk"></div>
-        <div class="sekcja-info">
-          <h3>Opis</h3>
-          <p id="biznes-opis-tekst" class="tekst-szary">—</p>
-        </div>
+        <div id="alerty-dokumentow"></div>
       </div>
 
       <!-- PRACOWNICY -->
@@ -129,9 +130,13 @@
       <div id="tab-faktury" class="tab">
         <div class="naglowek">
           <h1>Faktury od kontrahenta</h1>
-          <button class="btn-primary" id="btn-dodaj-fakture">+ Dodaj fakturę</button>
+          <div class="naglowek-przyciski">
+            <button class="btn-secondary" id="btn-ustawienia-ksef">⚙ KSeF</button>
+            <button class="btn-primary" id="btn-dodaj-fakture">+ Dodaj fakturę</button>
+          </div>
         </div>
         <div id="lista-faktur"></div>
+        <div id="faktury-paginacja" class="paginacja"></div>
       </div>
 
       <!-- WYPŁATY -->
@@ -144,6 +149,7 @@
           </div>
         </div>
         <div id="lista-wyplat"></div>
+        <div id="wyplaty-paginacja" class="paginacja"></div>
       </div>
 
       <!-- WSZYSTKIE PLIKI -->
@@ -233,6 +239,7 @@
             <option value="B2B / kontrakt">B2B / kontrakt</option>
           </select>
         </label>
+        <label>Umowa do (data zakończenia)<input id="p-umowa-do" type="date"></label>
         <label>Skan umowy<input id="p-plik-umowy" type="file" accept=".pdf,.jpg,.jpeg,.png"></label>
         <p id="p-plik-aktualny" class="tekst-szary ukryty" style="font-size:12px;margin-top:-8px"></p>
 
@@ -309,20 +316,56 @@
 
     <!-- Modal: Dodaj fakturę -->
     <div id="modal-faktura" class="modal ukryty">
-      <div class="modal-naglowek"><h2>Faktura od kontrahenta</h2><button class="btn-zamknij" data-modal="modal-faktura">✕</button></div>
+      <div class="modal-naglowek"><h2 id="modal-faktura-tytul">Faktura od kontrahenta</h2><button class="btn-zamknij" data-modal="modal-faktura">✕</button></div>
       <form id="form-faktura">
         <div class="form-row">
           <label>Nr faktury<input id="f-numer" type="text" placeholder="np. FV/2024/001"></label>
-          <label>Kwota (PLN) *<input id="f-kwota" type="number" min="0" step="0.01" required></label>
+          <label>Kwota *<input id="f-kwota" type="number" min="0" step="0.01" required></label>
+          <label>Waluta
+            <select id="f-waluta">
+              <option value="PLN">PLN</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="GBP">GBP</option>
+              <option value="CHF">CHF</option>
+            </select>
+          </label>
         </div>
+        <div class="form-row ukryty" id="f-kurs-wrapper">
+          <label>Kurs (1 jedn. = ? PLN)<input id="f-kurs" type="number" min="0" step="0.0001" value="1"></label>
+          <button type="button" class="btn-secondary" id="btn-pobierz-kurs-nbp">Pobierz kurs NBP</button>
+        </div>
+        <p id="f-kwota-pln-podglad" class="info-tekst ukryty"></p>
         <label>Data wystawienia *<input id="f-data" type="date" required></label>
         <div class="form-row">
           <label>Okres od<input id="f-okres-od" type="date"></label>
           <label>Okres do<input id="f-okres-do" type="date"></label>
         </div>
+        <label>NIP kontrahenta<input id="f-nip-kontrahenta" type="text" placeholder="np. 1234567890" maxlength="10"></label>
         <label>Opis / Uwagi<textarea id="f-opis" rows="2" placeholder="np. Ekipa 1 — Lyon, 2 tygodnie"></textarea></label>
         <div class="modal-przyciski">
           <button type="button" class="btn-secondary" data-modal="modal-faktura">Anuluj</button>
+          <button type="submit" class="btn-primary">Zapisz</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal: Ustawienia integracji KSeF -->
+    <div id="modal-ksef-ustawienia" class="modal ukryty">
+      <div class="modal-naglowek"><h2>Integracja KSeF</h2><button class="btn-zamknij" data-modal="modal-ksef-ustawienia">✕</button></div>
+      <form id="form-ksef-ustawienia">
+        <p class="info-tekst">Dane potrzebne do wysyłki faktur do Krajowego Systemu e-Faktur dla tego biznesu.</p>
+        <label>NIP firmy<input id="ks-nip" type="text" placeholder="np. 1234567890" maxlength="10"></label>
+        <label>Token KSeF<input id="ks-token" type="password" placeholder="token uwierzytelniający z aplikacji podatnika KSeF"></label>
+        <label>Środowisko
+          <select id="ks-srodowisko">
+            <option value="test">Testowe</option>
+            <option value="demo">Demo (przedprodukcyjne)</option>
+            <option value="produkcja">Produkcyjne</option>
+          </select>
+        </label>
+        <div class="modal-przyciski">
+          <button type="button" class="btn-secondary" data-modal="modal-ksef-ustawienia">Anuluj</button>
           <button type="submit" class="btn-primary">Zapisz</button>
         </div>
       </form>

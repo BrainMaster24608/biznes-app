@@ -135,6 +135,11 @@ body {
   justify-content: space-between;
   margin-bottom: 28px;
 }
+.naglowek-przyciski {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 h1 {
   font-size: 24px;
   font-weight: 600;
@@ -230,6 +235,11 @@ h3 {
 .badge.czerwony {
   background: rgba(239, 68, 68, 0.15);
   color: var(--czerwony);
+}
+.info-tekst {
+  font-size: 13px;
+  color: var(--tekst-szary, #888);
+  margin-bottom: 16px;
 }
 .karta-akcje {
   display: flex;
@@ -497,6 +507,40 @@ th.sortowalna .strzalka {
   border-radius: var(--radius);
   padding: 20px;
   margin-bottom: 20px;
+}
+
+/* ALERTY DOKUMENTÓW */
+.alert-dokumenty {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--czerwony);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.alert-dokumenty h3 {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.alert-wiersz {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.alert-wiersz:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.alert-wiersz .alert-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+.alert-wiersz .alert-status.wygasly {
+  color: var(--czerwony);
+}
+.alert-wiersz .alert-status.wygasa {
+  color: var(--zolty);
 }
 
 /* LISTA DOKUMENTÓW */

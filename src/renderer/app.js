@@ -159,9 +159,10 @@ async function otworzBiznes(id) {
   aktywnyBiznes = biznes;
 
   $("biznes-nazwa-naglowek").textContent = biznes.nazwa;
-  $("biznes-branza-naglowek").textContent = biznes.branza || "";
-  $("biznes-opis-tekst").textContent = biznes.opis || "Brak opisu.";
   $("sidebar-biznes-nazwa").textContent = biznes.nazwa;
+
+  bilansMiesiac = biezacyMiesiac();
+  $("bilans-miesiac").value = bilansMiesiac;
 
   zastosujModul(biznes.typ);
 
@@ -202,7 +203,7 @@ async function ladujDashboard() {
     .map(
       (b) => `
     <div class="karta-biznes" data-id="${b.id}" style="cursor:pointer">
-      <div><h3>${esc(b.nazwa)}</h3>${b.branza ? `<span class="badge">${esc(b.branza)}</span>` : ""}</div>
+      <div><h3>${esc(b.nazwa)}</h3></div>
       <span style="color:var(--tekst2);font-size:13px">Otwórz →</span>
     </div>
   `,
@@ -220,20 +221,31 @@ async function ladujListeBiznesow() {
   renderujListeBiznesow();
 }
 
+let stronaBiznesy = 1;
+
+function ustawStroneBiznesy(strona) {
+  stronaBiznesy = strona;
+  renderujListeBiznesow();
+}
+
 function renderujListeBiznesow() {
   if (!biznesy.length) {
     $("lista-biznesow").innerHTML =
       `<div class="pusty-stan"><div class="duza-ikona">🏢</div><p>Dodaj swój pierwszy biznes.</p></div>`;
+    $("biznesy-paginacja").innerHTML = "";
     return;
   }
-  $("lista-biznesow").innerHTML = biznesy
+
+  const maxStrona = Math.max(1, Math.ceil(biznesy.length / ROZMIAR_STRONY));
+  if (stronaBiznesy > maxStrona) stronaBiznesy = maxStrona;
+  const naStronie = stronicuj(biznesy, stronaBiznesy);
+
+  $("lista-biznesow").innerHTML = naStronie
     .map(
       (b) => `
     <div class="karta-biznes" data-id="${b.id}" style="cursor:pointer">
       <div>
         <h3>${esc(b.nazwa)}</h3>
-        ${b.branza ? `<span class="badge">${esc(b.branza)}</span>` : ""}
-        ${b.opis ? `<p style="color:var(--tekst2);font-size:13px;margin-top:6px">${esc(b.opis)}</p>` : ""}
       </div>
       <div class="karta-akcje">
         <button class="btn-danger" data-usun="${b.id}">Usuń</button>
@@ -253,6 +265,8 @@ function renderujListeBiznesow() {
       await usunBiznes(parseInt(btn.dataset.usun));
     });
   });
+
+  renderujPaginacje("biznesy-paginacja", biznesy.length, stronaBiznesy, ustawStroneBiznesy);
 }
 
 $("btn-otworz-modal-biznes").addEventListener("click", () =>
@@ -278,8 +292,10 @@ async function usunBiznes(id) {
 }
 
 // ---- BILANS ----
+let bilansMiesiac = "";
+
 async function ladujBilans() {
-  const b = await window.api.bilans.pobierz(aktywnyBiznes.id);
+  const b = await window.api.bilans.pobierz(aktywnyBiznes.id, bilansMiesiac || null);
   const modul = MODULY[aktywnyBiznes.typ] || MODULY.francja;
   $("bilans-karty").innerHTML = `
     <div class="karta-stat">
@@ -302,6 +318,81 @@ async function ladujBilans() {
   `;
 }
 
+$("bilans-miesiac").addEventListener("change", () => {
+  bilansMiesiac = $("bilans-miesiac").value;
+  ladujBilans();
+});
+
+$("btn-bilans-wyczysc-miesiac").addEventListener("click", () => {
+  bilansMiesiac = "";
+  $("bilans-miesiac").value = "";
+  ladujBilans();
+});
+
+// ---- ALERTY DOKUMENTÓW ----
+const parsujDate = (iso) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+function statusTerminu(dataStr) {
+  if (!dataStr) return null;
+  const dzis = parsujDate(isoData(new Date()));
+  const dni = Math.round((parsujDate(dataStr) - dzis) / 86400000);
+  if (dni < 0) return { tekst: `Wygasł ${-dni} dni temu`, klasa: "wygasly" };
+  if (dni <= 30) return { tekst: `Wygasa za ${dni} dni`, klasa: "wygasa" };
+  return null;
+}
+
+function statusDokumentuPracownika(p) {
+  return statusTerminu(p.dokument_waznosc);
+}
+
+function statusUmowyPracownika(p) {
+  return statusTerminu(p.umowa_do);
+}
+
+function renderujAlertyDokumentow() {
+  const kontener = $("alerty-dokumentow");
+  if (!kontener) return;
+
+  const zagrozenia = [];
+  pracownicy
+    .filter((p) => p.aktywny)
+    .forEach((p) => {
+      const statusDokumentu = statusDokumentuPracownika(p);
+      if (statusDokumentu) {
+        zagrozenia.push({ p, etykieta: "Dokument tożsamości", data: p.dokument_waznosc, status: statusDokumentu });
+      }
+      const statusUmowy = statusUmowyPracownika(p);
+      if (statusUmowy) {
+        zagrozenia.push({ p, etykieta: "Umowa", data: p.umowa_do, status: statusUmowy });
+      }
+    });
+  zagrozenia.sort((a, b) => a.data.localeCompare(b.data));
+
+  if (!zagrozenia.length) {
+    kontener.innerHTML = "";
+    return;
+  }
+
+  kontener.innerHTML = `
+    <div class="alert-dokumenty">
+      <h3>⚠️ Dokumenty i umowy wymagające uwagi</h3>
+      ${zagrozenia
+        .map(
+          ({ p, etykieta, data, status }) => `
+        <div class="alert-wiersz">
+          <span>${esc(p.imie)} ${esc(p.nazwisko)} — ${etykieta}</span>
+          <span class="alert-status ${status.klasa}">${status.tekst} (${data})</span>
+        </div>
+      `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 // ---- PRACOWNICY ----
 let edytowanyPracownikId = null;
 let sortPracownicy = { kolumna: "nazwisko", kierunek: 1 };
@@ -310,6 +401,7 @@ let stronaPracownicy = 1;
 async function ladujPracownikow() {
   pracownicy = await window.api.pracownicy.pobierz(aktywnyBiznes.id);
   renderujPracownikow();
+  renderujAlertyDokumentow();
 }
 
 function strzalkaSort(aktualnaKolumna, kolumna, kierunek) {
@@ -401,10 +493,16 @@ function renderujPracownikow() {
         </tr></thead>
         <tbody>
           ${naStronie
-            .map(
-              (p) => `
+            .map((p) => {
+              const statusDokumentu = statusDokumentuPracownika(p);
+              const statusUmowy = statusUmowyPracownika(p);
+              const ostrzezenia = [
+                statusDokumentu ? `<span class="alert-status ${statusDokumentu.klasa}" title="Dokument tożsamości: ${statusDokumentu.tekst} (${p.dokument_waznosc})">⚠️📄</span>` : "",
+                statusUmowy ? `<span class="alert-status ${statusUmowy.klasa}" title="Umowa: ${statusUmowy.tekst} (${p.umowa_do})">⚠️📝</span>` : "",
+              ].join(" ");
+              return `
             <tr>
-              <td><strong>${esc(p.imie)} ${esc(p.nazwisko)}</strong></td>
+              <td><strong>${esc(p.imie)} ${esc(p.nazwisko)}</strong> ${ostrzezenia}</td>
               <td>${esc(p.stanowisko)}</td>
               ${modul.maEkipy ? `<td><span class="badge">Ekipa ${p.ekipa}</span></td>` : ""}
               <td>${esc(p.telefon) || "—"}</td>
@@ -423,8 +521,8 @@ function renderujPracownikow() {
                 </div>
               </td>
             </tr>
-          `,
-            )
+          `;
+            })
             .join("")}
         </tbody>
       </table>
@@ -486,6 +584,8 @@ async function pokazSzczegolyPracownika(id) {
     ${wiersz("Nr dokumentu", p.nr_dokumentu)}
     ${wiersz("Ważność dokumentu", p.dokument_waznosc)}
     ${wiersz("Nr konta bankowego", p.nr_konta)}
+    ${wiersz("Typ umowy", p.typ_umowy)}
+    ${wiersz("Umowa do", p.umowa_do)}
   `;
   await ladujDokumentyPracownika(id);
   pokazModal("modal-pracownik-szczegoly");
@@ -584,6 +684,7 @@ function otworzEdycjePracownika(id) {
   $("p-dokument-waznosc").value = p.dokument_waznosc || "";
   $("p-nr-konta").value = p.nr_konta || "";
   $("p-typ-umowy").value = p.typ_umowy || "";
+  $("p-umowa-do").value = p.umowa_do || "";
 
   if (p.dokument_umowy) {
     $("p-plik-aktualny").textContent = `Obecny plik: ${p.dokument_umowy} (wybierz nowy, aby zastąpić)`;
@@ -623,6 +724,7 @@ $("form-pracownik").addEventListener("submit", async (e) => {
     dokument_waznosc: $("p-dokument-waznosc").value,
     nr_konta: $("p-nr-konta").value.trim(),
     typ_umowy: $("p-typ-umowy").value,
+    umowa_do: $("p-umowa-do").value,
     dokument_umowy,
   };
 
@@ -664,6 +766,10 @@ function klasaPaskaEkipy(ekipa) {
 }
 const isoData = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const biezacyMiesiac = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
 
 let sortWyjazdy = { kolumna: "data_wyjazdu", kierunek: -1 };
 let stronaWyjazdy = 1;
@@ -1023,8 +1129,15 @@ async function usunWyjazd(id) {
 }
 
 // ---- FAKTURY ----
+let stronaFaktury = 1;
+
 async function ladujFaktury() {
   faktury = await window.api.faktury.pobierz(aktywnyBiznes.id);
+  renderujFaktury();
+}
+
+function ustawStroneFaktury(strona) {
+  stronaFaktury = strona;
   renderujFaktury();
 }
 
@@ -1032,14 +1145,20 @@ function renderujFaktury() {
   if (!faktury.length) {
     $("lista-faktur").innerHTML =
       `<div class="pusty-stan"><div class="duza-ikona">📄</div><p>Brak zarejestrowanych faktur.</p></div>`;
+    $("faktury-paginacja").innerHTML = "";
     return;
   }
+
+  const maxStrona = Math.max(1, Math.ceil(faktury.length / ROZMIAR_STRONY));
+  if (stronaFaktury > maxStrona) stronaFaktury = maxStrona;
+  const naStronie = stronicuj(faktury, stronaFaktury);
+
   $("lista-faktur").innerHTML = `
     <div class="tabela-wrapper">
       <table>
-        <thead><tr><th>Nr faktury</th><th>Kwota</th><th>Data</th><th>Okres</th><th>Opis</th><th></th></tr></thead>
+        <thead><tr><th>Nr faktury</th><th>Kwota</th><th>Data</th><th>Okres</th><th>Opis</th><th>Waluta</th><th>KSeF</th><th></th></tr></thead>
         <tbody>
-          ${faktury
+          ${naStronie
             .map(
               (f) => `
             <tr>
@@ -1048,7 +1167,15 @@ function renderujFaktury() {
               <td>${f.data_wystawienia || "—"}</td>
               <td>${f.okres_od && f.okres_do ? `${f.okres_od} → ${f.okres_do}` : "—"}</td>
               <td style="color:var(--tekst2)">${esc(f.opis) || "—"}</td>
-              <td><button class="btn-danger" data-usun-fakture="${f.id}">Usuń</button></td>
+              <td>${podgladWaluty(f)}</td>
+              <td>${znacznikKsef(f)}</td>
+              <td>
+                <div class="akcje-ikony">
+                  ${f.ksef_numer ? "" : `<button class="btn-ikona" data-wyslij-ksef="${f.id}" title="Wyślij do KSeF">📤</button>`}
+                  <button class="btn-ikona" data-edytuj-fakture="${f.id}" title="Edytuj">✏️</button>
+                  <button class="btn-ikona btn-ikona-danger" data-usun-fakture="${f.id}" title="Usuń">🗑️</button>
+                </div>
+              </td>
             </tr>
           `,
             )
@@ -1063,23 +1190,146 @@ function renderujFaktury() {
       usunFakture(parseInt(btn.dataset.usunFakture)),
     );
   });
+  document.querySelectorAll("[data-edytuj-fakture]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      otworzEdycjeFaktury(parseInt(btn.dataset.edytujFakture)),
+    );
+  });
+  document.querySelectorAll("[data-wyslij-ksef]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      wyslijFaktureDoKsef(parseInt(btn.dataset.wyslijKsef)),
+    );
+  });
+
+  renderujPaginacje("faktury-paginacja", faktury.length, stronaFaktury, ustawStroneFaktury);
 }
 
-$("btn-dodaj-fakture").addEventListener("click", () =>
-  pokazModal("modal-faktura"),
-);
+function podgladWaluty(f) {
+  if (!f.waluta || f.waluta === "PLN") return `<span style="color:var(--tekst2)">PLN</span>`;
+  return `<span title="${(f.kwota_oryginalna || 0).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${esc(f.waluta)} × ${f.kurs}">${esc(f.waluta)} × ${f.kurs}</span>`;
+}
+
+function znacznikKsef(f) {
+  if (f.ksef_numer) return `<span class="badge zielony" title="${esc(f.ksef_numer)}">Wysłano</span>`;
+  if (f.ksef_status === "blad") return `<span class="badge czerwony" title="${esc(f.ksef_blad || "")}">Błąd</span>`;
+  return `<span class="badge">Niewysłana</span>`;
+}
+
+async function wyslijFaktureDoKsef(id) {
+  if (!aktywnyBiznes.nip || !aktywnyBiznes.ksef_token) {
+    alert("Najpierw skonfiguruj NIP i token KSeF (przycisk „⚙ KSeF” nad listą faktur).");
+    return;
+  }
+  const btn = document.querySelector(`[data-wyslij-ksef="${id}"]`);
+  if (btn) btn.disabled = true;
+  const wynik = await window.api.ksef.wyslij(id);
+  if (!wynik.sukces) {
+    alert(`Nie udało się wysłać faktury do KSeF:\n${wynik.blad}`);
+  }
+  await ladujFaktury();
+}
+
+let edytowanaFakturaId = null;
+
+function otworzEdycjeFaktury(id) {
+  const f = faktury.find((f) => f.id === id);
+  if (!f) return;
+  edytowanaFakturaId = id;
+  $("modal-faktura-tytul").textContent = "Edytuj fakturę";
+
+  $("f-numer").value = f.numer_faktury || "";
+  $("f-kwota").value = f.kwota_oryginalna ?? f.kwota ?? "";
+  $("f-waluta").value = f.waluta || "PLN";
+  $("f-kurs").value = f.kurs || 1;
+  $("f-data").value = f.data_wystawienia || "";
+  $("f-okres-od").value = f.okres_od || "";
+  $("f-okres-do").value = f.okres_do || "";
+  $("f-nip-kontrahenta").value = f.nip_kontrahenta || "";
+  $("f-opis").value = f.opis || "";
+
+  zaktualizujWidocznoscKursu();
+  zaktualizujPodgladPln();
+  pokazModal("modal-faktura");
+}
+
+$("btn-dodaj-fakture").addEventListener("click", () => {
+  edytowanaFakturaId = null;
+  $("modal-faktura-tytul").textContent = "Faktura od kontrahenta";
+  $("form-faktura").reset();
+  $("f-waluta").value = "PLN";
+  $("f-kurs").value = 1;
+  zaktualizujWidocznoscKursu();
+  zaktualizujPodgladPln();
+  pokazModal("modal-faktura");
+});
+
+function zaktualizujWidocznoscKursu() {
+  const jestPln = $("f-waluta").value === "PLN";
+  $("f-kurs-wrapper").classList.toggle("ukryty", jestPln);
+  if (jestPln) $("f-kurs").value = 1;
+}
+
+function zaktualizujPodgladPln() {
+  const jestPln = $("f-waluta").value === "PLN";
+  const podglad = $("f-kwota-pln-podglad");
+  if (jestPln) {
+    podglad.classList.add("ukryty");
+    return;
+  }
+  const kwota = parseFloat($("f-kwota").value) || 0;
+  const kurs = parseFloat($("f-kurs").value) || 0;
+  podglad.textContent = `= ${pln(kwota * kurs)}`;
+  podglad.classList.remove("ukryty");
+}
+
+$("f-waluta").addEventListener("change", () => {
+  zaktualizujWidocznoscKursu();
+  zaktualizujPodgladPln();
+});
+$("f-kwota").addEventListener("input", zaktualizujPodgladPln);
+$("f-kurs").addEventListener("input", zaktualizujPodgladPln);
+
+$("btn-pobierz-kurs-nbp").addEventListener("click", async () => {
+  const waluta = $("f-waluta").value;
+  const data = $("f-data").value || isoData(new Date());
+  const btn = $("btn-pobierz-kurs-nbp");
+  btn.disabled = true;
+  btn.textContent = "Pobieranie…";
+  const wynik = await window.api.kursy.pobierzNbp(waluta, data);
+  btn.disabled = false;
+  btn.textContent = "Pobierz kurs NBP";
+  if (!wynik.sukces) {
+    alert(`Nie udało się pobrać kursu NBP: ${wynik.blad}`);
+    return;
+  }
+  $("f-kurs").value = wynik.kurs;
+  zaktualizujPodgladPln();
+});
 
 $("form-faktura").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await window.api.faktury.dodaj({
-    biznes_id: aktywnyBiznes.id,
+  const kwotaOryginalna = parseFloat($("f-kwota").value);
+  const kurs = parseFloat($("f-kurs").value) || 1;
+  const dane = {
     numer_faktury: $("f-numer").value.trim(),
-    kwota: parseFloat($("f-kwota").value),
+    kwota: Math.round(kwotaOryginalna * kurs * 100) / 100,
+    kwota_oryginalna: kwotaOryginalna,
+    waluta: $("f-waluta").value,
+    kurs,
     data_wystawienia: $("f-data").value,
     okres_od: $("f-okres-od").value,
     okres_do: $("f-okres-do").value,
+    nip_kontrahenta: $("f-nip-kontrahenta").value.trim(),
     opis: $("f-opis").value.trim(),
-  });
+  };
+
+  if (edytowanaFakturaId) {
+    await window.api.faktury.edytuj({ id: edytowanaFakturaId, ...dane });
+  } else {
+    await window.api.faktury.dodaj({ biznes_id: aktywnyBiznes.id, ...dane });
+  }
+
+  edytowanaFakturaId = null;
   zamknijModal("modal-faktura");
   await ladujFaktury();
   await ladujBilans();
@@ -1092,9 +1342,36 @@ async function usunFakture(id) {
   await ladujBilans();
 }
 
+$("btn-ustawienia-ksef").addEventListener("click", () => {
+  $("ks-nip").value = aktywnyBiznes.nip || "";
+  $("ks-token").value = aktywnyBiznes.ksef_token || "";
+  $("ks-srodowisko").value = aktywnyBiznes.ksef_srodowisko || "test";
+  pokazModal("modal-ksef-ustawienia");
+});
+
+$("form-ksef-ustawienia").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const zaktualizowany = await window.api.biznesy.edytuj({
+    id: aktywnyBiznes.id,
+    nip: $("ks-nip").value.trim(),
+    ksef_token: $("ks-token").value.trim(),
+    ksef_srodowisko: $("ks-srodowisko").value,
+  });
+  aktywnyBiznes = zaktualizowany;
+  zamknijModal("modal-ksef-ustawienia");
+  renderujFaktury();
+});
+
 // ---- WYPŁATY ----
+let stronaWyplaty = 1;
+
 async function ladujWyplaty() {
   wyplaty = await window.api.wyplaty.pobierz(aktywnyBiznes.id);
+  renderujWyplaty();
+}
+
+function ustawStroneWyplaty(strona) {
+  stronaWyplaty = strona;
   renderujWyplaty();
 }
 
@@ -1102,14 +1379,20 @@ function renderujWyplaty() {
   if (!wyplaty.length) {
     $("lista-wyplat").innerHTML =
       `<div class="pusty-stan"><div class="duza-ikona">💰</div><p>Brak zarejestrowanych wypłat.</p></div>`;
+    $("wyplaty-paginacja").innerHTML = "";
     return;
   }
+
+  const maxStrona = Math.max(1, Math.ceil(wyplaty.length / ROZMIAR_STRONY));
+  if (stronaWyplaty > maxStrona) stronaWyplaty = maxStrona;
+  const naStronie = stronicuj(wyplaty, stronaWyplaty);
+
   $("lista-wyplat").innerHTML = `
     <div class="tabela-wrapper">
       <table>
         <thead><tr><th>Pracownik</th><th>Ekipa</th><th>Godziny</th><th>Kwota</th><th>Miesiąc</th><th>Notatki</th></tr></thead>
         <tbody>
-          ${wyplaty
+          ${naStronie
             .map(
               (w) => `
             <tr>
@@ -1127,6 +1410,8 @@ function renderujWyplaty() {
       </table>
     </div>
   `;
+
+  renderujPaginacje("wyplaty-paginacja", wyplaty.length, stronaWyplaty, ustawStroneWyplaty);
 }
 
 function odswiezPodgladKwoty() {

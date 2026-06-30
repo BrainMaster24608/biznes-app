@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   biznesy: {
     pobierz: () => ipcRenderer.invoke('biznesy:pobierz'),
     dodaj: (d) => ipcRenderer.invoke('biznesy:dodaj', d),
+    edytuj: (d) => ipcRenderer.invoke('biznesy:edytuj', d),
     usun: (id) => ipcRenderer.invoke('biznesy:usun', id),
   },
   pracownicy: {
@@ -33,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   faktury: {
     pobierz: (biznes_id) => ipcRenderer.invoke('faktury:pobierz', biznes_id),
     dodaj: (d) => ipcRenderer.invoke('faktury:dodaj', d),
+    edytuj: (d) => ipcRenderer.invoke('faktury:edytuj', d),
     usun: (id) => ipcRenderer.invoke('faktury:usun', id),
   },
   koszty: {
@@ -46,6 +48,12 @@ contextBridge.exposeInMainWorld('api', {
     dodajHurtowo: (d) => ipcRenderer.invoke('wyplaty:dodaj-hurtowo', d),
   },
   bilans: {
-    pobierz: (biznes_id) => ipcRenderer.invoke('bilans:pobierz', biznes_id),
+    pobierz: (biznes_id, miesiac) => ipcRenderer.invoke('bilans:pobierz', biznes_id, miesiac),
+  },
+  ksef: {
+    wyslij: (faktura_id) => ipcRenderer.invoke('ksef:wyslij', { faktura_id }),
+  },
+  kursy: {
+    pobierzNbp: (waluta, data) => ipcRenderer.invoke('kursy:nbp', { waluta, data }),
   }
 })

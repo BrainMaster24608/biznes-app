@@ -105,12 +105,20 @@ async function initDatabase() {
   if (!kolumnyBiznesy.some(k => k.name === 'typ')) {
     db.run("ALTER TABLE biznesy ADD COLUMN typ TEXT DEFAULT 'francja'")
   }
+  const nowePoaBiznesy = ['nip TEXT', "ksef_token TEXT", "ksef_srodowisko TEXT DEFAULT 'test'"]
+  nowePoaBiznesy.forEach(definicja => {
+    const nazwa = definicja.split(' ')[0]
+    if (!kolumnyBiznesy.some(k => k.name === nazwa)) {
+      db.run(`ALTER TABLE biznesy ADD COLUMN ${definicja}`)
+    }
+  })
 
   const nowePoaPracownika = [
     'pesel TEXT', 'data_urodzenia TEXT', 'adres TEXT',
     'telefon TEXT', 'email TEXT',
     'nr_dokumentu TEXT', 'dokument_waznosc TEXT',
     'nr_konta TEXT', 'typ_umowy TEXT', 'dokument_umowy TEXT',
+    'umowa_do TEXT',
   ]
   const kolumnyPracownicy = queryAll("PRAGMA table_info(pracownicy)")
   if (kolumnyPracownicy.some(k => k.name === 'wyplata_miesieczna') && !kolumnyPracownicy.some(k => k.name === 'stawka_godzinowa')) {
@@ -131,6 +139,21 @@ async function initDatabase() {
   const kolumnyWyjazdy = queryAll("PRAGMA table_info(wyjazdy)")
   if (!kolumnyWyjazdy.some(k => k.name === 'wydatki_rzeczywiste')) {
     db.run("ALTER TABLE wyjazdy ADD COLUMN wydatki_rzeczywiste REAL")
+  }
+
+  const noweKolumnyFaktury = [
+    'nip_kontrahenta TEXT', 'ksef_numer TEXT', 'ksef_status TEXT', 'ksef_data_wyslania TEXT', 'ksef_blad TEXT',
+    "waluta TEXT DEFAULT 'PLN'", 'kurs REAL DEFAULT 1', 'kwota_oryginalna REAL',
+  ]
+  const kolumnyFaktury = queryAll("PRAGMA table_info(faktury_przychody)")
+  noweKolumnyFaktury.forEach(definicja => {
+    const nazwa = definicja.split(' ')[0]
+    if (!kolumnyFaktury.some(k => k.name === nazwa)) {
+      db.run(`ALTER TABLE faktury_przychody ADD COLUMN ${definicja}`)
+    }
+  })
+  if (!kolumnyFaktury.some(k => k.name === 'kwota_oryginalna')) {
+    db.run('UPDATE faktury_przychody SET kwota_oryginalna = kwota WHERE kwota_oryginalna IS NULL')
   }
 
   fs.mkdirSync(dokumentyPath, { recursive: true })
@@ -192,6 +215,15 @@ ipcMain.handle('biznesy:dodaj', (e, d) => {
   return queryOne('SELECT * FROM biznesy ORDER BY id DESC LIMIT 1')
 })
 
+ipcMain.handle('biznesy:edytuj', (e, d) => {
+  db.run(
+    'UPDATE biznesy SET nip = ?, ksef_token = ?, ksef_srodowisko = ? WHERE id = ?',
+    [d.nip || null, d.ksef_token || null, d.ksef_srodowisko || 'test', d.id]
+  )
+  zapiszBaze()
+  return queryOne('SELECT * FROM biznesy WHERE id = ?', [d.id])
+})
+
 ipcMain.handle('biznesy:usun', (e, id) => {
   db.run('DELETE FROM biznesy WHERE id = ?', [id])
   zapiszBaze()
@@ -208,12 +240,13 @@ ipcMain.handle('pracownicy:dodaj', (e, d) => {
     `INSERT INTO pracownicy (
       biznes_id, imie, nazwisko, stanowisko, stawka_godzinowa, ekipa,
       pesel, data_urodzenia, adres, telefon, email,
-      nr_dokumentu, dokument_waznosc, nr_konta, typ_umowy, dokument_umowy
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      nr_dokumentu, dokument_waznosc, nr_konta, typ_umowy, dokument_umowy, umowa_do
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       d.biznes_id, d.imie, d.nazwisko, d.stanowisko, d.stawka_godzinowa, d.ekipa,
       d.pesel || null, d.data_urodzenia || null, d.adres || null, d.telefon || null, d.email || null,
       d.nr_dokumentu || null, d.dokument_waznosc || null, d.nr_konta || null, d.typ_umowy || null, d.dokument_umowy || null,
+      d.umowa_do || null,
     ]
   )
   zapiszBaze()
@@ -225,12 +258,13 @@ ipcMain.handle('pracownicy:edytuj', (e, d) => {
     `UPDATE pracownicy SET
       imie = ?, nazwisko = ?, stanowisko = ?, stawka_godzinowa = ?, ekipa = ?,
       pesel = ?, data_urodzenia = ?, adres = ?, telefon = ?, email = ?,
-      nr_dokumentu = ?, dokument_waznosc = ?, nr_konta = ?, typ_umowy = ?, dokument_umowy = ?
+      nr_dokumentu = ?, dokument_waznosc = ?, nr_konta = ?, typ_umowy = ?, dokument_umowy = ?, umowa_do = ?
     WHERE id = ?`,
     [
       d.imie, d.nazwisko, d.stanowisko, d.stawka_godzinowa, d.ekipa,
       d.pesel || null, d.data_urodzenia || null, d.adres || null, d.telefon || null, d.email || null,
       d.nr_dokumentu || null, d.dokument_waznosc || null, d.nr_konta || null, d.typ_umowy || null, d.dokument_umowy || null,
+      d.umowa_do || null,
       d.id,
     ]
   )
@@ -350,17 +384,87 @@ ipcMain.handle('faktury:pobierz', (e, biznes_id) =>
 
 ipcMain.handle('faktury:dodaj', (e, d) => {
   db.run(
-    'INSERT INTO faktury_przychody (biznes_id, wyjazd_id, numer_faktury, kwota, data_wystawienia, okres_od, okres_do, opis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [d.biznes_id, d.wyjazd_id, d.numer_faktury, d.kwota, d.data_wystawienia, d.okres_od, d.okres_do, d.opis]
+    'INSERT INTO faktury_przychody (biznes_id, wyjazd_id, numer_faktury, kwota, data_wystawienia, okres_od, okres_do, opis, nip_kontrahenta, waluta, kurs, kwota_oryginalna) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [d.biznes_id, d.wyjazd_id || null, d.numer_faktury || null, d.kwota, d.data_wystawienia, d.okres_od || null, d.okres_do || null, d.opis || null, d.nip_kontrahenta || null, d.waluta || 'PLN', d.kurs || 1, d.kwota_oryginalna ?? d.kwota]
   )
   zapiszBaze()
   return queryOne('SELECT * FROM faktury_przychody ORDER BY id DESC LIMIT 1')
+})
+
+ipcMain.handle('faktury:edytuj', (e, d) => {
+  db.run(
+    `UPDATE faktury_przychody SET
+      numer_faktury = ?, kwota = ?, data_wystawienia = ?, okres_od = ?, okres_do = ?, opis = ?, nip_kontrahenta = ?, waluta = ?, kurs = ?, kwota_oryginalna = ?
+    WHERE id = ?`,
+    [d.numer_faktury || null, d.kwota, d.data_wystawienia, d.okres_od || null, d.okres_do || null, d.opis || null, d.nip_kontrahenta || null, d.waluta || 'PLN', d.kurs || 1, d.kwota_oryginalna ?? d.kwota, d.id]
+  )
+  zapiszBaze()
+  return queryOne('SELECT * FROM faktury_przychody WHERE id = ?', [d.id])
 })
 
 ipcMain.handle('faktury:usun', (e, id) => {
   db.run('DELETE FROM faktury_przychody WHERE id = ?', [id])
   zapiszBaze()
   return { sukces: true }
+})
+
+// ---- KURSY WALUT (NBP) ----
+ipcMain.handle('kursy:nbp', async (e, { waluta, data }) => {
+  if (!waluta || waluta === 'PLN') return { sukces: true, kurs: 1, data: data }
+  const dzien = new Date(data + 'T00:00:00')
+  for (let i = 0; i < 10; i++) {
+    const szukanaData = dzien.toISOString().slice(0, 10)
+    try {
+      const resp = await fetch(`https://api.nbp.pl/api/exchangerates/rates/a/${waluta.toLowerCase()}/${szukanaData}/?format=json`)
+      if (resp.ok) {
+        const dane = await resp.json()
+        return { sukces: true, kurs: dane.rates[0].mid, data: szukanaData }
+      }
+    } catch (err) {
+      return { sukces: false, blad: err.message }
+    }
+    dzien.setDate(dzien.getDate() - 1)
+  }
+  return { sukces: false, blad: `Brak kursu NBP dla ${waluta} w ostatnich 10 dniach` }
+})
+
+// ---- KSEF ----
+ipcMain.handle('ksef:wyslij', async (e, { faktura_id }) => {
+  const faktura = queryOne('SELECT * FROM faktury_przychody WHERE id = ?', [faktura_id])
+  if (!faktura) return { sukces: false, blad: 'Nie znaleziono faktury' }
+
+  const biznes = queryOne('SELECT * FROM biznesy WHERE id = ?', [faktura.biznes_id])
+  if (!biznes || !biznes.nip || !biznes.ksef_token) {
+    return { sukces: false, blad: 'Skonfiguruj NIP i token KSeF w ustawieniach integracji dla tego biznesu' }
+  }
+
+  try {
+    const ksef = require('./ksef')
+    const wynik = await ksef.wyslijFakture({
+      srodowisko: biznes.ksef_srodowisko || 'test',
+      nip: biznes.nip,
+      ksefToken: biznes.ksef_token,
+      sprzedawca: { nip: biznes.nip, nazwa: biznes.nazwa },
+      nabywca: { nip: faktura.nip_kontrahenta || '', nazwa: faktura.opis || 'Kontrahent' },
+      faktura: {
+        numer: faktura.numer_faktury || `FV/${faktura.id}`,
+        dataWystawienia: faktura.data_wystawienia,
+        dataWytworzenia: faktura.data_wystawienia,
+        kwotaNetto: faktura.kwota,
+        kwotaBrutto: faktura.kwota,
+      },
+    })
+    db.run(
+      "UPDATE faktury_przychody SET ksef_numer = ?, ksef_status = ?, ksef_data_wyslania = datetime('now'), ksef_blad = NULL WHERE id = ?",
+      [wynik.numerKsef, wynik.status, faktura_id]
+    )
+    zapiszBaze()
+    return { sukces: true, ...wynik }
+  } catch (err) {
+    db.run("UPDATE faktury_przychody SET ksef_status = 'blad', ksef_blad = ? WHERE id = ?", [err.message, faktura_id])
+    zapiszBaze()
+    return { sukces: false, blad: err.message }
+  }
 })
 
 // ---- KOSZTY TRANSPORTU ----
@@ -426,17 +530,23 @@ ipcMain.handle('wyplaty:dodaj-hurtowo', (e, d) => {
 })
 
 // ---- BILANS ----
-ipcMain.handle('bilans:pobierz', (e, biznes_id) => {
-  const przychody = queryOne('SELECT COALESCE(SUM(kwota), 0) as suma FROM faktury_przychody WHERE biznes_id = ?', [biznes_id])
-  const wyplaty = queryOne('SELECT COALESCE(SUM(kwota), 0) as suma FROM wyplaty WHERE biznes_id = ?', [biznes_id])
+ipcMain.handle('bilans:pobierz', (e, biznes_id, miesiac) => {
+  const warunekMiesiacFaktury = miesiac ? "AND strftime('%Y-%m', data_wystawienia) = ?" : ''
+  const warunekMiesiacWyplaty = miesiac ? 'AND miesiac = ?' : ''
+  const warunekMiesiacWyjazdy = miesiac ? "AND strftime('%Y-%m', w.data_wyjazdu) = ?" : ''
+  const warunekMiesiacWydatki = miesiac ? "AND strftime('%Y-%m', data_wyjazdu) = ?" : ''
+  const paramy = miesiac ? [biznes_id, miesiac] : [biznes_id]
+
+  const przychody = queryOne(`SELECT COALESCE(SUM(kwota), 0) as suma FROM faktury_przychody WHERE biznes_id = ? ${warunekMiesiacFaktury}`, paramy)
+  const wyplaty = queryOne(`SELECT COALESCE(SUM(kwota), 0) as suma FROM wyplaty WHERE biznes_id = ? ${warunekMiesiacWyplaty}`, paramy)
   const kosztyRaw = db.exec(`
     SELECT COALESCE(SUM(k.kwota), 0) as suma
     FROM koszty_transport k
     JOIN wyjazdy w ON k.wyjazd_id = w.id
-    WHERE w.biznes_id = ?
-  `, [biznes_id])
+    WHERE w.biznes_id = ? ${warunekMiesiacWyjazdy}
+  `, paramy)
   const koszty = kosztyRaw.length ? kosztyRaw[0].values[0][0] : 0
-  const wydatkiWyjazdy = queryOne('SELECT COALESCE(SUM(wydatki_rzeczywiste), 0) as suma FROM wyjazdy WHERE biznes_id = ?', [biznes_id])
+  const wydatkiWyjazdy = queryOne(`SELECT COALESCE(SUM(wydatki_rzeczywiste), 0) as suma FROM wyjazdy WHERE biznes_id = ? ${warunekMiesiacWydatki}`, paramy)
 
   const suma_przychodow = przychody?.suma || 0
   const suma_wyplat = wyplaty?.suma || 0
