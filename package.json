@@ -1,6 +1,6 @@
 {
   "name": "biznes-app",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Platforma zarządzania wieloma biznesami",
   "repository": "https://github.com/BrainMaster24608/biznes-app",
   "main": "src/main.js",
