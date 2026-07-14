@@ -1,6 +1,8 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
+const { exec } = require('child_process')
 
 let mainWindow
 let db
@@ -599,7 +601,59 @@ ipcMain.handle('aktualizacje:sprawdz', async () => {
     const najnowsza = dane.tag_name
     const aktualna = app.getVersion()
     const dostepna = porownajWersje(najnowsza, aktualna) > 0
-    return { sukces: true, aktualna, najnowsza, dostepna, url: dane.html_url, opis: dane.body || '' }
+    const zipAsset = dane.assets?.find(a => a.name.endsWith('.zip'))
+    return {
+      sukces: true, aktualna, najnowsza, dostepna,
+      url: dane.html_url, opis: dane.body || '',
+      downloadUrl: zipAsset?.browser_download_url || null,
+    }
+  } catch (err) {
+    return { sukces: false, blad: err.message }
+  }
+})
+
+function execCmd(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) reject(new Error(stderr || error.message))
+      else resolve(stdout)
+    })
+  })
+}
+
+ipcMain.handle('aktualizacje:pobierz-i-zainstaluj', async (e, { downloadUrl }) => {
+  const wyslijPostep = (faza) => mainWindow?.webContents.send('aktualizacje:postep', { faza })
+  try {
+    const tmpZip = path.join(os.tmpdir(), 'biznes-app-update.zip')
+    const tmpExtract = path.join(os.tmpdir(), 'biznes-app-extract')
+
+    wyslijPostep('pobieranie')
+    const resp = await net.fetch(downloadUrl)
+    if (!resp.ok) throw new Error(`Pobieranie nieudane: HTTP ${resp.status}`)
+    const buffer = await resp.arrayBuffer()
+    fs.writeFileSync(tmpZip, Buffer.from(buffer))
+
+    wyslijPostep('rozpakowywanie')
+    if (fs.existsSync(tmpExtract)) fs.rmSync(tmpExtract, { recursive: true })
+    await execCmd(`ditto -xk "${tmpZip}" "${tmpExtract}"`)
+
+    const appName = fs.readdirSync(tmpExtract).find(f => f.endsWith('.app'))
+    if (!appName) throw new Error('Nie znaleziono aplikacji w archiwum ZIP')
+
+    wyslijPostep('instalowanie')
+    const exePath = app.getPath('exe')
+    const appPath = path.join(path.dirname(path.dirname(path.dirname(exePath))))
+    if (!appPath.endsWith('.app')) throw new Error(`Nieoczekiwana ścieżka: ${appPath}`)
+
+    await execCmd(`cp -Rf "${path.join(tmpExtract, appName)}" "${appPath}"`)
+    await execCmd(`xattr -cr "${appPath}"`)
+
+    fs.rmSync(tmpZip, { force: true })
+    fs.rmSync(tmpExtract, { recursive: true, force: true })
+
+    app.relaunch()
+    app.quit()
+    return { sukces: true }
   } catch (err) {
     return { sukces: false, blad: err.message }
   }

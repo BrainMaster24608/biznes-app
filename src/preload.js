@@ -60,7 +60,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   aktualizacje: {
     sprawdz: () => ipcRenderer.invoke('aktualizacje:sprawdz'),
+    pobierzIZainstaluj: (downloadUrl) => ipcRenderer.invoke('aktualizacje:pobierz-i-zainstaluj', { downloadUrl }),
     otworzStrone: (url) => ipcRenderer.invoke('aktualizacje:otworz-strone', url),
+    onPostep: (cb) => ipcRenderer.on('aktualizacje:postep', (_e, d) => cb(d)),
     wersja: () => ipcRenderer.invoke('app:wersja'),
   }
 })

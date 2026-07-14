@@ -1724,6 +1724,7 @@ init();
 
 // ---- AKTUALIZACJE ----
 let updateUrl = null;
+let updateDownloadUrl = null;
 
 async function sprawdzAktualizacje(cicho = false) {
   const btn = $("btn-sprawdz-aktualizacje");
@@ -1743,6 +1744,7 @@ async function sprawdzAktualizacje(cicho = false) {
 
   if (wynik.dostepna) {
     updateUrl = wynik.url;
+    updateDownloadUrl = wynik.downloadUrl || null;
     ikona.textContent = "🔔";
     $("update-badge").classList.remove("ukryty");
     $("update-wersja-tekst").textContent = `v${wynik.aktualna} → ${wynik.najnowsza}`;
@@ -1756,10 +1758,30 @@ async function sprawdzAktualizacje(cicho = false) {
   }
 }
 
+const FAZY = { pobieranie: "Pobieranie…", rozpakowywanie: "Rozpakowywanie…", instalowanie: "Instalowanie…" };
+
+window.api.aktualizacje.onPostep(({ faza }) => {
+  const btn = $("btn-pobierz-aktualizacje");
+  btn.textContent = FAZY[faza] || "…";
+  btn.disabled = true;
+});
+
 $("btn-sprawdz-aktualizacje").addEventListener("click", () => sprawdzAktualizacje(false));
 
-$("btn-pobierz-aktualizacje").addEventListener("click", () => {
-  if (updateUrl) window.api.aktualizacje.otworzStrone(updateUrl);
+$("btn-pobierz-aktualizacje").addEventListener("click", async () => {
+  if (!updateDownloadUrl) {
+    window.api.aktualizacje.otworzStrone(updateUrl);
+    return;
+  }
+  const btn = $("btn-pobierz-aktualizacje");
+  btn.disabled = true;
+  btn.textContent = "Pobieranie…";
+  const wynik = await window.api.aktualizacje.pobierzIZainstaluj(updateDownloadUrl);
+  if (!wynik.sukces) {
+    btn.disabled = false;
+    btn.textContent = "Pobierz";
+    alert(`Aktualizacja nieudana:\n${wynik.blad}`);
+  }
 });
 
 // Automatyczne sprawdzenie przy starcie (cicho — nie przeszkadza jeśli brak połączenia)
