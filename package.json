@@ -1,6 +1,6 @@
 {
   "name": "biznes-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Platforma zarządzania wieloma biznesami",
   "repository": "https://github.com/BrainMaster24608/biznes-app",
   "main": "src/main.js",
@@ -8,7 +8,8 @@
     "start": "electron-forge start",
     "dev": "electron . --dev",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "release": "bash scripts/release.sh"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
