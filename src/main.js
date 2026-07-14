@@ -578,7 +578,7 @@ ipcMain.handle('bilans:pobierz', (e, biznes_id, miesiac) => {
 })
 
 // ---- AKTUALIZACJE ----
-const REPO_URL = 'https://api.github.com/repos/hubertdobucki/biznes-app/releases/latest'
+const REPO_URL = 'https://api.github.com/repos/BrainMaster24608/biznes-app/releases/latest'
 
 function porownajWersje(a, b) {
   const czesci = (v) => v.replace(/^v/, '').split('.').map(Number)
