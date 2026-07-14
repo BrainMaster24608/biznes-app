@@ -515,6 +515,23 @@ ipcMain.handle('wyplaty:dodaj', (e, d) => {
   return { sukces: true }
 })
 
+ipcMain.handle('wyplaty:edytuj', (e, d) => {
+  const pracownik = queryOne('SELECT stawka_godzinowa FROM pracownicy WHERE id = ?', [d.pracownik_id])
+  const kwota = (d.godziny || 0) * (pracownik?.stawka_godzinowa || 0)
+  db.run(
+    'UPDATE wyplaty SET godziny = ?, kwota = ?, miesiac = ?, notatki = ? WHERE id = ?',
+    [d.godziny, kwota, d.miesiac, d.notatki || null, d.id]
+  )
+  zapiszBaze()
+  return { sukces: true }
+})
+
+ipcMain.handle('wyplaty:usun', (e, id) => {
+  db.run('DELETE FROM wyplaty WHERE id = ?', [id])
+  zapiszBaze()
+  return { sukces: true }
+})
+
 ipcMain.handle('wyplaty:dodaj-hurtowo', (e, d) => {
   d.wpisy.forEach((wpis) => {
     if (!wpis.godziny) return
@@ -559,6 +576,40 @@ ipcMain.handle('bilans:pobierz', (e, biznes_id, miesiac) => {
     zysk: suma_przychodow - suma_wyplat - suma_kosztow
   }
 })
+
+// ---- AKTUALIZACJE ----
+const REPO_URL = 'https://api.github.com/repos/hubertdobucki/biznes-app/releases/latest'
+
+function porownajWersje(a, b) {
+  const czesci = (v) => v.replace(/^v/, '').split('.').map(Number)
+  const [aA, aB, aC] = czesci(a)
+  const [bA, bB, bC] = czesci(b)
+  if (aA !== bA) return aA - bA
+  if (aB !== bB) return aB - bB
+  return (aC || 0) - (bC || 0)
+}
+
+ipcMain.handle('aktualizacje:sprawdz', async () => {
+  try {
+    const resp = await fetch(REPO_URL, {
+      headers: { 'User-Agent': 'biznes-app', Accept: 'application/vnd.github+json' },
+    })
+    if (!resp.ok) return { sukces: false, blad: `GitHub API: HTTP ${resp.status}` }
+    const dane = await resp.json()
+    const najnowsza = dane.tag_name
+    const aktualna = app.getVersion()
+    const dostepna = porownajWersje(najnowsza, aktualna) > 0
+    return { sukces: true, aktualna, najnowsza, dostepna, url: dane.html_url, opis: dane.body || '' }
+  } catch (err) {
+    return { sukces: false, blad: err.message }
+  }
+})
+
+ipcMain.handle('aktualizacje:otworz-strone', (e, url) => {
+  shell.openExternal(url)
+})
+
+ipcMain.handle('app:wersja', () => app.getVersion())
 
 // ---- START ----
 app.whenReady().then(async () => {

@@ -61,6 +61,78 @@ body {
 .logo-tekst {
   font-weight: 600;
   font-size: 15px;
+  flex: 1;
+}
+.update-badge {
+  width: 10px;
+  height: 10px;
+  background: #f59e0b;
+  border-radius: 50%;
+  font-size: 0;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+  animation: pulse-badge 2s infinite;
+}
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.sidebar-stopka {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.update-panel {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.update-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.update-ikona {
+  font-size: 18px;
+  line-height: 1;
+}
+.update-tytul {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f59e0b;
+}
+.update-wersja {
+  font-size: 11px;
+  color: var(--tekst2);
+  margin-top: 2px;
+}
+.update-btn {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.btn-sprawdz-aktualizacje {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--tekst2);
+  cursor: pointer;
+  text-align: center;
+  -webkit-app-region: no-drag;
+}
+.btn-sprawdz-aktualizacje:hover {
+  background: var(--bg3, rgba(0,0,0,0.05));
+  color: var(--tekst);
 }
 .menu {
   display: flex;

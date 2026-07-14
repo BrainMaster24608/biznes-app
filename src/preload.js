@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('api', {
   wyplaty: {
     pobierz: (biznes_id) => ipcRenderer.invoke('wyplaty:pobierz', biznes_id),
     dodaj: (d) => ipcRenderer.invoke('wyplaty:dodaj', d),
+    edytuj: (d) => ipcRenderer.invoke('wyplaty:edytuj', d),
+    usun: (id) => ipcRenderer.invoke('wyplaty:usun', id),
     dodajHurtowo: (d) => ipcRenderer.invoke('wyplaty:dodaj-hurtowo', d),
   },
   bilans: {
@@ -55,5 +57,10 @@ contextBridge.exposeInMainWorld('api', {
   },
   kursy: {
     pobierzNbp: (waluta, data) => ipcRenderer.invoke('kursy:nbp', { waluta, data }),
+  },
+  aktualizacje: {
+    sprawdz: () => ipcRenderer.invoke('aktualizacje:sprawdz'),
+    otworzStrone: (url) => ipcRenderer.invoke('aktualizacje:otworz-strone', url),
+    wersja: () => ipcRenderer.invoke('app:wersja'),
   }
 })

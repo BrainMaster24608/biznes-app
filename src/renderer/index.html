@@ -13,6 +13,7 @@
     <div class="logo">
       <div class="logo-ikona">B</div>
       <span class="logo-tekst">BiznesApp</span>
+      <span id="update-badge" class="update-badge ukryty" title="Dostępna aktualizacja">●</span>
     </div>
     <nav class="menu" id="menu-glowny">
       <a href="#" class="menu-item aktywny" data-strona="dashboard">
@@ -33,6 +34,21 @@
       <a href="#" class="menu-item" data-tab="pliki"><span>📁</span> Wszystkie pliki</a>
       <div class="menu-separator"></div>
       <a href="#" class="menu-item" id="btn-powrot"><span>←</span> Wszystkie biznesy</a>
+    </div>
+    <div class="sidebar-stopka">
+      <div id="update-panel" class="update-panel ukryty">
+        <div class="update-info">
+          <span class="update-ikona">🔔</span>
+          <div>
+            <div class="update-tytul">Dostępna aktualizacja</div>
+            <div class="update-wersja" id="update-wersja-tekst"></div>
+          </div>
+        </div>
+        <button class="btn-primary update-btn" id="btn-pobierz-aktualizacje">Pobierz</button>
+      </div>
+      <button class="btn-sprawdz-aktualizacje" id="btn-sprawdz-aktualizacje">
+        <span id="update-status-ikona">⟳</span> Sprawdź aktualizacje
+      </button>
     </div>
   </aside>
 
@@ -373,7 +389,7 @@
 
     <!-- Modal: Dodaj wypłatę -->
     <div id="modal-wyplata" class="modal ukryty">
-      <div class="modal-naglowek"><h2>Wypłata pracownika</h2><button class="btn-zamknij" data-modal="modal-wyplata">✕</button></div>
+      <div class="modal-naglowek"><h2 id="modal-wyplata-tytul">Wypłata pracownika</h2><button class="btn-zamknij" data-modal="modal-wyplata">✕</button></div>
       <form id="form-wyplata">
         <label>Pracownik *
           <select id="wp-pracownik" required></select>

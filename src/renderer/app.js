@@ -360,10 +360,6 @@ function renderujAlertyDokumentow() {
   pracownicy
     .filter((p) => p.aktywny)
     .forEach((p) => {
-      const statusDokumentu = statusDokumentuPracownika(p);
-      if (statusDokumentu) {
-        zagrozenia.push({ p, etykieta: "Dokument tożsamości", data: p.dokument_waznosc, status: statusDokumentu });
-      }
       const statusUmowy = statusUmowyPracownika(p);
       if (statusUmowy) {
         zagrozenia.push({ p, etykieta: "Umowa", data: p.umowa_do, status: statusUmowy });
@@ -494,10 +490,8 @@ function renderujPracownikow() {
         <tbody>
           ${naStronie
             .map((p) => {
-              const statusDokumentu = statusDokumentuPracownika(p);
               const statusUmowy = statusUmowyPracownika(p);
               const ostrzezenia = [
-                statusDokumentu ? `<span class="alert-status ${statusDokumentu.klasa}" title="Dokument tożsamości: ${statusDokumentu.tekst} (${p.dokument_waznosc})">⚠️📄</span>` : "",
                 statusUmowy ? `<span class="alert-status ${statusUmowy.klasa}" title="Umowa: ${statusUmowy.tekst} (${p.umowa_do})">⚠️📝</span>` : "",
               ].join(" ");
               return `
@@ -1256,6 +1250,7 @@ $("btn-dodaj-fakture").addEventListener("click", () => {
   edytowanaFakturaId = null;
   $("modal-faktura-tytul").textContent = "Faktura od kontrahenta";
   $("form-faktura").reset();
+  $("f-data").value = isoData(new Date());
   $("f-waluta").value = "PLN";
   $("f-kurs").value = 1;
   zaktualizujWidocznoscKursu();
@@ -1291,7 +1286,11 @@ $("f-kurs").addEventListener("input", zaktualizujPodgladPln);
 
 $("btn-pobierz-kurs-nbp").addEventListener("click", async () => {
   const waluta = $("f-waluta").value;
-  const data = $("f-data").value || isoData(new Date());
+  const data = $("f-data").value;
+  if (!data) {
+    alert("Najpierw wpisz datę wystawienia faktury.");
+    return;
+  }
   const btn = $("btn-pobierz-kurs-nbp");
   btn.disabled = true;
   btn.textContent = "Pobieranie…";
@@ -1390,7 +1389,7 @@ function renderujWyplaty() {
   $("lista-wyplat").innerHTML = `
     <div class="tabela-wrapper">
       <table>
-        <thead><tr><th>Pracownik</th><th>Ekipa</th><th>Godziny</th><th>Kwota</th><th>Miesiąc</th><th>Notatki</th></tr></thead>
+        <thead><tr><th>Pracownik</th><th>Ekipa</th><th>Godziny</th><th>Kwota</th><th>Miesiąc</th><th>Notatki</th><th></th></tr></thead>
         <tbody>
           ${naStronie
             .map(
@@ -1402,6 +1401,12 @@ function renderujWyplaty() {
               <td style="color:var(--czerwony);font-weight:600">${pln(w.kwota)}</td>
               <td>${w.miesiac || "—"}</td>
               <td style="color:var(--tekst2)">${esc(w.notatki) || "—"}</td>
+              <td>
+                <div class="akcje-ikony">
+                  <button class="btn-ikona" data-edytuj-wyplate="${w.id}" title="Edytuj">✏️</button>
+                  <button class="btn-ikona btn-ikona-danger" data-usun-wyplate="${w.id}" title="Usuń">🗑️</button>
+                </div>
+              </td>
             </tr>
           `,
             )
@@ -1410,6 +1415,13 @@ function renderujWyplaty() {
       </table>
     </div>
   `;
+
+  document.querySelectorAll("[data-edytuj-wyplate]").forEach((btn) => {
+    btn.addEventListener("click", () => otworzEdycjeWyplaty(parseInt(btn.dataset.edytujWyplate)));
+  });
+  document.querySelectorAll("[data-usun-wyplate]").forEach((btn) => {
+    btn.addEventListener("click", () => usunWyplate(parseInt(btn.dataset.usunWyplate)));
+  });
 
   renderujPaginacje("wyplaty-paginacja", wyplaty.length, stronaWyplaty, ustawStroneWyplaty);
 }
@@ -1421,7 +1433,12 @@ function odswiezPodgladKwoty() {
   $("wp-kwota-podglad").textContent = pln(kwota);
 }
 
+let edytowanaWyplataId = null;
+
 $("btn-dodaj-wyplate").addEventListener("click", () => {
+  edytowanaWyplataId = null;
+  $("modal-wyplata-tytul").textContent = "Wypłata pracownika";
+  $("wp-pracownik").disabled = false;
   $("wp-pracownik").innerHTML = pracownicy
     .filter((p) => p.aktywny)
     .map(
@@ -1429,22 +1446,51 @@ $("btn-dodaj-wyplate").addEventListener("click", () => {
         `<option value="${p.id}">${p.imie} ${p.nazwisko} (Ekipa ${p.ekipa}) — stawka: ${pln(p.stawka_godzinowa)}/h</option>`,
     )
     .join("");
+  $("form-wyplata").reset();
   odswiezPodgladKwoty();
   pokazModal("modal-wyplata");
 });
+
+function otworzEdycjeWyplaty(id) {
+  const w = wyplaty.find((w) => w.id === id);
+  if (!w) return;
+  edytowanaWyplataId = id;
+  $("modal-wyplata-tytul").textContent = "Edytuj wypłatę";
+
+  $("wp-pracownik").innerHTML = `<option value="${w.pracownik_id}">${esc(w.imie)} ${esc(w.nazwisko)}</option>`;
+  $("wp-pracownik").disabled = true;
+  $("wp-godziny").value = w.godziny ?? "";
+  $("wp-miesiac").value = w.miesiac || "";
+  $("wp-notatki").value = w.notatki || "";
+  odswiezPodgladKwoty();
+  pokazModal("modal-wyplata");
+}
+
+async function usunWyplate(id) {
+  if (!confirm("Usunąć tę wypłatę?")) return;
+  await window.api.wyplaty.usun(id);
+  await ladujWyplaty();
+  await ladujBilans();
+}
 
 $("wp-pracownik").addEventListener("change", odswiezPodgladKwoty);
 $("wp-godziny").addEventListener("input", odswiezPodgladKwoty);
 
 $("form-wyplata").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await window.api.wyplaty.dodaj({
-    biznes_id: aktywnyBiznes.id,
+  const dane = {
     pracownik_id: parseInt($("wp-pracownik").value),
     godziny: parseFloat($("wp-godziny").value) || 0,
     miesiac: $("wp-miesiac").value,
     notatki: $("wp-notatki").value.trim(),
-  });
+  };
+  if (edytowanaWyplataId) {
+    await window.api.wyplaty.edytuj({ id: edytowanaWyplataId, ...dane });
+  } else {
+    await window.api.wyplaty.dodaj({ biznes_id: aktywnyBiznes.id, ...dane });
+  }
+  edytowanaWyplataId = null;
+  $("wp-pracownik").disabled = false;
   zamknijModal("modal-wyplata");
   await ladujWyplaty();
   await ladujBilans();
@@ -1675,3 +1721,46 @@ async function init() {
 }
 
 init();
+
+// ---- AKTUALIZACJE ----
+let updateUrl = null;
+
+async function sprawdzAktualizacje(cicho = false) {
+  const btn = $("btn-sprawdz-aktualizacje");
+  const ikona = $("update-status-ikona");
+  btn.disabled = true;
+  ikona.textContent = "…";
+
+  const wynik = await window.api.aktualizacje.sprawdz();
+
+  btn.disabled = false;
+
+  if (!wynik.sukces) {
+    ikona.textContent = "⟳";
+    if (!cicho) alert(`Nie udało się sprawdzić aktualizacji:\n${wynik.blad}`);
+    return;
+  }
+
+  if (wynik.dostepna) {
+    updateUrl = wynik.url;
+    ikona.textContent = "🔔";
+    $("update-badge").classList.remove("ukryty");
+    $("update-wersja-tekst").textContent = `v${wynik.aktualna} → ${wynik.najnowsza}`;
+    $("update-panel").classList.remove("ukryty");
+  } else {
+    ikona.textContent = "✓";
+    $("update-badge").classList.add("ukryty");
+    $("update-panel").classList.add("ukryty");
+    if (!cicho) alert(`Masz najnowszą wersję (${wynik.aktualna}).`);
+    setTimeout(() => { ikona.textContent = "⟳"; }, 3000);
+  }
+}
+
+$("btn-sprawdz-aktualizacje").addEventListener("click", () => sprawdzAktualizacje(false));
+
+$("btn-pobierz-aktualizacje").addEventListener("click", () => {
+  if (updateUrl) window.api.aktualizacje.otworzStrone(updateUrl);
+});
+
+// Automatyczne sprawdzenie przy starcie (cicho — nie przeszkadza jeśli brak połączenia)
+setTimeout(() => sprawdzAktualizacje(true), 3000);
